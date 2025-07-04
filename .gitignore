@@ -1,0 +1,51 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment folders
+venv/
+env/
+.venv/
+
+# macOS specific files
+.DS_Store
+
+# Windows specific files
+Thumbs.db
+ehthumbs.db
+
+# IDE/editor folders
+.vscode/
+.idea/
+
+# Python log files
+*.log
+
+# Secret configuration and environment files
+.env
+*.env
+config_file.py
+
+# Jupyter Notebook checkpoints (if used)
+.ipynb_checkpoints/
+
+# Test reports
+htmlcov/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+
+# Pytest cache
+.pytest_cache/
+
+# MyPy type checker
+.mypy_cache/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/

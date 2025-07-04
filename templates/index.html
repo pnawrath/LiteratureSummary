@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Summarizer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body, html {
+            height: 100%;
+            background-color: #1e293b;
+            color: #d1d5db;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        .sidebar {
+            height: 100vh;
+            overflow-y: auto;
+            background-color: #273549;
+            border-right: 1px solid #415a77;
+            color: #d1d5db;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding-bottom: 20px;
+        }
+
+        .sidebar .settings-form {
+            flex-grow: 1;
+        }
+
+        .content-area {
+            height: 100vh;
+            overflow-y: auto;
+            padding: 20px;
+            background-color: #334155;
+            color: #e0e6f2;
+        }
+
+        h3, h4, h5, label {
+            color: #a3b18a;
+        }
+
+        .btn-primary {
+            background-color: #9caf88;
+            border-color: #8da47e;
+            color: #1e293b;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+        }
+
+        .btn-primary:hover, .btn-primary:focus {
+            background-color: #7f926d;
+            border-color: #7f926d;
+            color: #f9fafb;
+        }
+
+        .form-control, .form-select, textarea {
+            background-color: #1e293b;
+            border: 1px solid #5a6a55;
+            color: #d1d5db;
+        }
+
+        .form-control:focus, .form-select:focus, textarea:focus {
+            background-color: #243746;
+            border-color: #9caf88;
+            color: #e0e6f2;
+            outline: none;
+            box-shadow: 0 0 5px #9caf88;
+        }
+
+        .form-check-label {
+            color: #c0cca7;
+        }
+
+        a {
+            color: #9caf88;
+            text-decoration: underline;
+        }
+
+        a:hover {
+            color: #7f926d;
+            text-decoration: none;
+        }
+
+        pre {
+            white-space: pre-wrap;
+            background-color: #1e293b;
+            color: #d1d5db;
+            padding: 15px;
+            border-radius: 6px;
+        }
+
+        .summary-box {
+            background-color: #2c3e50;
+            color: #a3b18a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 1rem;
+            line-height: 1.5;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            white-space: pre-wrap;
+            margin-bottom: 30px;
+            border: 1px solid #a3b18a66;
+        }
+
+        .footer-box {
+            font-size: 0.8rem;
+            color: #7f926d;
+            margin-top: 20px;
+        }
+
+        /* Scrollbar for sidebar */
+        .sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .sidebar::-webkit-scrollbar-thumb {
+            background-color: #9caf88;
+            border-radius: 4px;
+        }
+        .sidebar::-webkit-scrollbar-track {
+            background-color: #273549;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    <div class="row h-100">
+
+        <!-- Sidebar for Settings -->
+        <div class="col-md-4 col-lg-3 sidebar p-4">
+
+            <div class="settings-form">
+                <h3>Literature Search</h3>
+                <form method="POST">
+
+                    <!-- Button to toggle advanced settings -->
+                    <button class="btn btn-sm btn-outline-secondary mb-3" type="button" data-bs-toggle="collapse" data-bs-target="#advancedSettings" aria-expanded="false" aria-controls="advancedSettings">
+                        Advanced Settings
+                    </button>
+
+                    <!-- Button to toggle How to Use -->
+                    <button class="btn btn-sm btn-outline-secondary mb-3" type="button" data-bs-toggle="collapse" data-bs-target="#howToUseBox" aria-expanded="false" aria-controls="howToUseBox">
+                        Info
+                    </button>
+
+                    <!-- Collapsible How to Use content -->
+                    <div class="collapse mb-3" id="howToUseBox">
+                        <div class="p-2" style="background-color: #1e293b; color: #d1d5db; border: 1px solid #5a6a55; border-radius: 6px; font-size: 0.9rem; line-height: 1.4;">
+                            Enter broad search terms for general topics (e.g., multiple sclerosis, lymphoma) and narrow terms to further filter the results (e.g., T cells, HLA-E).
+It is recommended to include both singular and plural versions of your search terms (e.g., clone, clones) for better coverage. Separate all terms with commas.
+You can adjust the time window for the PubMed search. The bioRxiv search is fixed to the latest 30 publications in immunology, and the Bluesky search covers posts from the last 7 days.
+For best results, you can customize the GPT prompt to fit your specific needs. Please note that the GPT-generated response is limited to 1000 tokens.
+                        </div>
+                    </div>
+
+                    <div class="collapse" id="advancedSettings">
+                        <div class="mb-3">
+                            <label for="Entrez_email" class="form-label">Entrez Email:</label>
+                            <input type="email" id="Entrez_email" name="Entrez_email" class="form-control" value="{{ config['Entrez_email'] }}" required />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="BIORXIV_RSS_URL" class="form-label">bioRxiv RSS URL:</label>
+                            <input type="url" id="BIORXIV_RSS_URL" name="BIORXIV_RSS_URL" class="form-control" value="{{ config['BIORXIV_RSS_URL'] }}" required />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="handle_bsky" class="form-label">Bluesky Handle:</label>
+                            <input type="text" id="handle_bsky" name="handle_bsky" class="form-control" value="{{ config['handle_bsky'] }}" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="bsky_app_password" class="form-label">App Password:</label>
+                            <input type="password" id="bsky_app_password" name="bsky_app_password" class="form-control" value="{{ config['bsky_app_password'] }}" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="feed_uri" class="form-label">Feed URI:</label>
+                            <input type="text" id="feed_uri" name="feed_uri" class="form-control" value="{{ config['feed_uri'] }}" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="openai_api_key" class="form-label">OpenAI API Key:</label>
+                            <input type="password" id="openai_api_key" name="openai_api_key" class="form-control" value="{{ config['openai_api_key'] }}" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="broad_terms" class="form-label" title="Comma-separated broad search terms.">Broad Context:</label>
+                        <textarea id="broad_terms" name="broad_terms" class="form-control" rows="3">{{ config['broad_terms']|join(', ') }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="narrow_terms" class="form-label" title="Comma-separated narrow filter terms.">Narrow Terms:</label>
+                        <textarea id="narrow_terms" name="narrow_terms" class="form-control" rows="3">{{ config['narrow_terms']|join(', ') }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="DAYS_BACK" class="form-label">PubMed Days Back:</label>
+                        <input type="number" id="DAYS_BACK" name="DAYS_BACK" class="form-control" value="{{ config['DAYS_BACK'] }}" min="1" max="365" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="FILTER_SCOPE" class="form-label">PubMed Filter Scope:</label>
+                        <select id="FILTER_SCOPE" name="FILTER_SCOPE" class="form-select">
+                            <option value="title" {% if config['FILTER_SCOPE'] == 'title' %}selected{% endif %}>Title</option>
+                            <option value="title+abstract" {% if config['FILTER_SCOPE'] == 'title+abstract' %}selected{% endif %}>Title + Abstract</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="prompt1" class="form-label">GPT Prompt:</label>
+                        <textarea id="prompt1" name="prompt1" rows="5" class="form-control">{{ config['prompt1'] }}</textarea>
+                    </div>
+
+                    <div class="form-check mb-2">
+                        <input type="checkbox" id="use_pubmed" name="use_pubmed" class="form-check-input" {% if config['use_pubmed'] %}checked{% endif %} />
+                        <label class="form-check-label" for="use_pubmed">PubMed</label>
+                    </div>
+
+                    <div class="form-check mb-2">
+                        <input type="checkbox" id="use_biorxiv" name="use_biorxiv" class="form-check-input" {% if config['use_biorxiv'] %}checked{% endif %} />
+                        <label class="form-check-label" for="use_biorxiv">bioRxiv</label>
+                    </div>
+
+                    <div class="form-check mb-4">
+                        <input type="checkbox" id="use_bluesky" name="use_bluesky" class="form-check-input" {% if config['use_bluesky'] %}checked{% endif %} />
+                        <label class="form-check-label" for="use_bluesky">Bluesky</label>
+                    </div>
+
+                    <div class="form-check mb-4">
+                        <input type="checkbox" id="GPT_summary" name="GPT_summary" class="form-check-input" {% if config['GPT_summary'] %}checked{% endif %} />
+                        <label class="form-check-label" for="GPT_summary">Generate GPT Summary</label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">Run Search</button>
+                </form>
+            </div>
+
+            <div class="footer-box">
+                <p>Summarizer v0.9</p>
+                <p>Contact: philipp.nawrath@irb.usi.ch</p>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="col-md-8 col-lg-9 content-area">
+
+            {% for msg in status_messages %}
+              {% if msg %}
+                <div class="alert alert-warning alert-dismissible fade show" role="alert" id="statusAlert">
+                  {{ msg }}
+                </div>
+              {% endif %}
+            {% endfor %}
+
+            {% if summary %}
+            <div class="mb-4 p-3 rounded" style="background-color:#2c3e50; color:#a3b18a;">
+
+              <h3 style="color:#a3b18a; font-size: 1.5rem; margin-bottom: 15px;">Summary</h3>
+
+              <div style="white-space: pre-wrap; color:#e0e6f2; margin: 0; font-size: 1rem; line-height: 1.4;">
+                {{- summary.strip() }}
+              </div>
+
+            </div>
+            {% endif %}
+
+            {% if grouped_results.PubMed %}
+            <div class="mb-4 p-3 rounded" style="background-color:#415a77; color:#e0e6f2;">
+                <h3 style="color:#a3b18a;">PubMed Results</h3>
+                <ul class="list-group list-group-flush">
+                    {% for res in grouped_results.PubMed %}
+                    <li class="list-group-item" style="background: transparent; border: none; color: inherit;">
+                        <h5>PubMed — <em>{{ res.title }}</em></h5>
+                        <p><strong>Authors:</strong> {{ res.authors }}<br>
+                           <strong>Published:</strong> {{ res.published }}<br>
+                           <strong>DOI/Link:</strong> <a href="{{ res.doi }}" target="_blank" style="color:#a3b18a;">{{ res.doi }}</a></p>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if grouped_results.bioRxiv %}
+            <div class="mb-4 p-3 rounded" style="background-color:#415a77; color:#e0e6f2;">
+                <h3 style="color:#a3b18a;">bioRxiv Results</h3>
+                <ul class="list-group list-group-flush">
+                    {% for res in grouped_results.bioRxiv %}
+                    <li class="list-group-item" style="background: transparent; border: none; color: inherit;">
+                        <h5>bioRxiv — <em>{{ res.title }}</em></h5>
+                        <p><strong>Authors:</strong> {{ res.authors }}<br>
+                           <strong>Published:</strong> {{ res.published }}<br>
+                           <strong>DOI/Link:</strong> <a href="{{ res.doi }}" target="_blank" style="color:#a3b18a;">{{ res.doi }}</a></p>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if grouped_results.Bluesky %}
+            <div class="mb-4 p-3 rounded" style="background-color:#415a77; color:#e0e6f2;">
+                <h3 style="color:#a3b18a;">Bluesky Posts</h3>
+                <ul class="list-group list-group-flush">
+                    {% for res in grouped_results.Bluesky %}
+                    <li class="list-group-item" style="background: transparent; border: none; color: inherit;">
+                        <h5>{{ res.authors }}</h5>
+                        <p><strong>Published:</strong> {{ res.published }}</p>
+                        <p>{{ res.abstract }}</p>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.7/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+<script>
+  window.onload = function() {
+    const alertBox = document.getElementById('statusAlert');
+    if (alertBox) {
+      setTimeout(() => {
+        alertBox.classList.remove('show');
+        alertBox.classList.add('hide');
+      }, 4000);  // 4 seconds visible
+    }
+  }
+</script>
+
+</body>
+</html>
