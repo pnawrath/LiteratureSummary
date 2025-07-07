@@ -41,7 +41,7 @@ def fetch_pubmed_results(config, max_retries=3, retry_delay=5):
     search_query = " OR ".join(config.get("broad_terms", []))
     if not search_query:
         print("⚠️ No broad terms defined. Skipping PubMed search.")
-        return [], "⚠️ No broad terms defined."
+        return [], "⚠️ No broad terms defined.", 0
 
     print(f"🔎 PubMed query: '{search_query}', from {start_date} to {end_date}")
 
@@ -66,12 +66,12 @@ def fetch_pubmed_results(config, max_retries=3, retry_delay=5):
                 time.sleep(retry_delay)
             else:
                 print("PubMed search failed after retries.")
-                return [], "PubMed search failed after multiple attempts."
+                return [], "PubMed search failed after multiple attempts.", 0
 
     id_list = record.get("IdList", [])
     if not id_list:
         print("🔍 No PubMed results found.")
-        return [], "No PubMed results found."
+        return [], "No PubMed results found.", 0
 
     results = []
     try:
@@ -99,12 +99,13 @@ def fetch_pubmed_results(config, max_retries=3, retry_delay=5):
             })
 
         fetch_handle.close()
-        print(f"✅ Retrieved {len(results)} PubMed results.")
-        return results, f"✅ Retrieved {len(results)} PubMed results."
+        count = len(results)
+        print(f"✅ Retrieved {count} PubMed results.")
+        return results, "", count
 
     except Exception as e:
         print(f"Failed to fetch or parse PubMed details: {e}")
-        return [], "Failed to fetch or parse PubMed details."
+        return [], "Failed to fetch or parse PubMed details.", 0
 
 
 # -------- BIORXIV PIPELINE --------
@@ -131,7 +132,7 @@ def fetch_biorxiv_results(config):
 
     if not feed.entries:
         print("No recent bioRxiv articles found.")
-        return results
+        return results, 0
 
     broad_pattern, narrow_pattern = build_patterns(config)
 
@@ -167,10 +168,11 @@ def fetch_biorxiv_results(config):
                 "abstract": abstract
             })
 
+    count = len(results)
     if not results:
         print("No articles matched both broad and narrow filters.")
 
-    return results
+    return results, count
 
 
 # -------- Bluesky PIPELINE --------
@@ -197,7 +199,7 @@ def fetch_custom_bluesky_feed(config, limit=20):
     posts = data.get("feed", [])
     if not posts:
         print("No posts found in the custom feed.")
-        return results
+        return results, 0
 
     broad_pattern, narrow_pattern = build_patterns(config)
 
@@ -227,10 +229,11 @@ def fetch_custom_bluesky_feed(config, limit=20):
                 "abstract": text
             })
 
+    count = len(results)
     if not results:
         print("No posts matched both broad and narrow filters.")
 
-    return results
+    return results, count
 
 
 def summarize_results(all_results, config):
@@ -259,3 +262,45 @@ def summarize_results(all_results, config):
     )
 
     return response.choices[0].message.content
+
+
+# -------- New unified fetch function --------
+def fetch_all_results(config):
+    all_results = []
+    grouped_results = {"PubMed": [], "bioRxiv": [], "Bluesky": []}
+    searched_sources = []
+
+    # PubMed
+    if config.get("use_pubmed", False):
+        searched_sources.append("PubMed")
+        pubmed_results, pubmed_msg, pubmed_count = fetch_pubmed_results(config)
+        grouped_results["PubMed"] = pubmed_results
+    else:
+        pubmed_count = 0
+
+    # bioRxiv
+    if config.get("use_biorxiv", False):
+        searched_sources.append("bioRxiv")
+        biorxiv_results, biorxiv_count = fetch_biorxiv_results(config)
+        grouped_results["bioRxiv"] = biorxiv_results
+    else:
+        biorxiv_count = 0
+
+    # Bluesky
+    if config.get("use_bluesky", False):
+        searched_sources.append("Bluesky")
+        bluesky_results, bluesky_count = fetch_custom_bluesky_feed(config)
+        grouped_results["Bluesky"] = bluesky_results
+    else:
+        bluesky_count = 0
+
+    for src in searched_sources:
+        all_results.extend(grouped_results[src])
+
+    counts = {
+        "PubMed": pubmed_count,
+        "bioRxiv": biorxiv_count,
+        "Bluesky": bluesky_count,
+    }
+
+    return all_results, grouped_results, counts, searched_sources

@@ -26,7 +26,6 @@ ehthumbs.db
 # Secret configuration and environment files
 .env
 *.env
-config_file.py
 
 # Jupyter Notebook checkpoints (if used)
 .ipynb_checkpoints/

@@ -12,20 +12,19 @@ default_config = {
     "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
     "use_pubmed": True,
     "use_biorxiv": True,
-    "use_bluesky": True,
+    "use_bluesky": False,
     "GPT_summary": False,
-    "broad_terms": ["e.g.", "multiple sclerosis"
-    ],
-    "narrow_terms": ["e.g.", "T cells"
-    ],
+    "broad_terms": ["e.g.", "multiple sclerosis", "MS", "autoimmunity"
+                    ],
+    "narrow_terms": ["e.g.", "T cells", "CD8", "TCR"
+                     ],
     "DAYS_BACK": 7,
     "FILTER_SCOPE": "title",
     "prompt1": (
-        "You are an immunologist summarizing recent publications and posts. "
-        "Focus on extracting key findings, trends, or notable publications relevant "
-        "to T cells in multiple sclerosis and autoimmunity. Structure your summary "
-        "the following way: write 2 sentences on highlights followed by a bullet point "
-        "section for (if present) PubMed, biorxiv and Bluesky. If something is not relevant "
-        "to the topic, ignore it. Be succinct and professional"
+        "You are an expert summarizing recent scientific publications and posts. "
+        "Focus on extracting key findings, trends, or notable advances relevant "
+        "to the specified topic. Structure your summary as follows: write 2 sentences highlighting "
+        "the main insights followed by a bullet point section for (if present) PubMed, bioRxiv, and Bluesky sources. "
+        "If content is not relevant to the topic, omit it. Be succinct and professional."
     )
 }
