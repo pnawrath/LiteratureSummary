@@ -21,10 +21,10 @@ default_config = {
     "DAYS_BACK": 7,
     "FILTER_SCOPE": "title",
     "prompt1": (
-        "You are an expert summarizing recent scientific publications and posts. "
-        "Focus on extracting key findings, trends, or notable advances relevant "
-        "to the specified topic. Structure your summary as follows: write 2 sentences highlighting "
-        "the main insights followed by a bullet point section for (if present) PubMed, bioRxiv, and Bluesky sources. "
-        "If content is not relevant to the topic, omit it. Be succinct and professional."
+        "You are an immunologist summarizing recent scientific publications and posts. "
+        "Focus on extracting key findings, trends, or notable advances."
+        "Structure your summary as follows: write 2 sentences highlighting "
+        "the main insights followed by a bullet point section for (if present) PubMed, bioRxiv, and Bluesky. "
+        "If content is not relevant to the topic, omit it. Be succinct and professional. "
     )
 }
