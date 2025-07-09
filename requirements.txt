@@ -5,3 +5,4 @@ openai~=1.93.0
 bio~=1.7.1
 python-dotenv~=1.1.1
 gunicorn==23.0.0
+Markdown~=3.6
