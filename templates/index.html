@@ -1,129 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8" />
     <title>Summarizer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <style>
-        body, html {
-            height: 100%;
-            background-color: #1e293b;
-            color: #d1d5db;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        }
-
-        .sidebar {
-            height: 100vh;
-            overflow-y: auto;
-            background-color: #273549;
-            border-right: 1px solid #415a77;
-            color: #d1d5db;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding-bottom: 20px;
-        }
-
-        .sidebar .settings-form {
-            flex-grow: 1;
-        }
-
-        .content-area {
-            height: 100vh;
-            overflow-y: auto;
-            padding: 20px;
-            background-color: #334155;
-            color: #e0e6f2;
-        }
-
-        h3, h4, h5, label {
-            color: #a3b18a;
-        }
-
-        .btn-primary {
-            background-color: #9caf88;
-            border-color: #8da47e;
-            color: #1e293b;
-            font-weight: 600;
-            transition: background-color 0.3s ease;
-        }
-
-        .btn-primary:hover, .btn-primary:focus {
-            background-color: #7f926d;
-            border-color: #7f926d;
-            color: #f9fafb;
-        }
-
-        .form-control, .form-select, textarea {
-            background-color: #1e293b;
-            border: 1px solid #5a6a55;
-            color: #d1d5db;
-        }
-
-        .form-control:focus, .form-select:focus, textarea:focus {
-            background-color: #243746;
-            border-color: #9caf88;
-            color: #e0e6f2;
-            outline: none;
-            box-shadow: 0 0 5px #9caf88;
-        }
-
-        .form-check-label {
-            color: #c0cca7;
-        }
-
-        a {
-            color: #9caf88;
-            text-decoration: underline;
-        }
-
-        a:hover {
-            color: #7f926d;
-            text-decoration: none;
-        }
-
-        pre {
-            white-space: pre-wrap;
-            background-color: #1e293b;
-            color: #d1d5db;
-            padding: 15px;
-            border-radius: 6px;
-        }
-
-        .summary-box {
-            background-color: #2c3e50;
-            color: #a3b18a;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            font-size: 1rem;
-            line-height: 1.5;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            white-space: pre-wrap;
-            margin-bottom: 30px;
-            border: 1px solid #a3b18a66;
-        }
-
-        .footer-box {
-            font-size: 0.8rem;
-            color: #7f926d;
-            margin-top: 20px;
-        }
-
-        /* Scrollbar for sidebar */
-        .sidebar::-webkit-scrollbar {
-            width: 8px;
-        }
-        .sidebar::-webkit-scrollbar-thumb {
-            background-color: #9caf88;
-            border-radius: 4px;
-        }
-        .sidebar::-webkit-scrollbar-track {
-            background-color: #273549;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
+
 <body>
+<div id="loading-spinner">
+  <video autoplay loop muted playsinline style="max-width: 180px; width: 100%; height: auto;">
+    <source src="{{ url_for('static', filename='loading.webm') }}" type="video/webm" />
+  </video>
+  <p style="color: white; margin-top: 15px;">Loading results...</p>
+</div>
 
 <div class="container-fluid">
     <div class="row h-100">
@@ -249,7 +140,7 @@
             </div>
 
             <div class="footer-box">
-                <p>Summarizer v0.9</p>
+                <p>Summarizer v0.9.1</p>
                 <p>Contact: philipp.nawrath@irb.usi.ch</p>
             </div>
         </div>
@@ -344,6 +235,18 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.7/dist/umd/popper.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const form = document.querySelector("form");
+  const spinner = document.getElementById("loading-spinner");
+
+  if (form && spinner) {
+    form.addEventListener("submit", function () {
+      spinner.classList.add("show");
+    });
+  }
+});
+</script>
 
 </body>
 </html>

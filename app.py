@@ -47,10 +47,11 @@ def index():
 
         # Generate GPT summary if requested and if we have results
         summary = ""
-        if config.get("GPT_summary") and all_results and total_results_count < 100:
-            summary = core.summarize_results(all_results, config).strip()
-        elif config.get("GPT_summary") and total_results_count >= 100:
-            summary = "GPT summary skipped because more than 100 results were found."
+        if config.get("GPT_summary") and all_results:
+            if total_results_count < 60:
+                summary = core.summarize_results(all_results, grouped_results, config).strip()
+            else:
+                summary = "GPT summary skipped because more than 60 results were found."
 
     else:
         # GET request — empty defaults
@@ -72,6 +73,7 @@ def index():
         bluesky_feeds=BLUESKY_FEEDS,
         help_text=html_help_text,
     )
+
 
 if __name__ == "__main__":
     app.run(debug=True)

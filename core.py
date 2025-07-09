@@ -83,7 +83,12 @@ def fetch_pubmed_results(config, max_retries=3, retry_delay=5):
             title = rec.get("TI", "No Title")
             authors = ", ".join(rec.get("AU", []))
             published = rec.get("DP", "Unknown")
-            doi = rec.get("AID", [""])[0].split(" ")[0] if "AID" in rec else ""
+            doi = ""
+            if "AID" in rec:
+                for aid in rec["AID"]:
+                    if "doi" in aid.lower():
+                        doi = "https://doi.org/" + aid.split(" ")[0]
+                        break
             abstract = rec.get("AB", "")
 
             if config.get("narrow_terms"):
@@ -240,32 +245,98 @@ def fetch_custom_bluesky_feed(config, limit=100):
     return results, count
 
 
-def summarize_results(all_results, config):
-    summary_input = ""
-    for entry in all_results:
-        summary_input += (
-            f"Source: {entry.get('source', 'Unknown')}\n"
-            f"Title: {entry.get('title', 'N/A')}\n"
-            f"Authors: {entry.get('authors', 'N/A')}\n"
-            f"Published: {entry.get('published', 'N/A')}\n"
-            f"DOI/Link: {entry.get('doi', 'N/A')}\n"
-            f"Content: {entry.get('abstract', 'N/A')}\n"
-            f"{'-'*50}\n"
-        )
-
+def summarize_results(all_results, grouped_results, config, batch_size=10):
+    import math
     openai.api_key = config["openai_api_key"]
 
-    response = openai.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=[
-            {"role": "system", "content": config["prompt1"]},
-            {"role": "user", "content": f"Summarize the following literature and posts:\n\n{summary_input}"}
-        ],
-        max_tokens=800,
-        temperature=0.3
+    def call_openai(prompt_text):
+        response = openai.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": config["prompt1"]},
+                {"role": "user", "content": prompt_text}
+            ],
+            max_tokens=800,
+            temperature=0.3,
+            stop=["[END SUMMARY]"]
+        )
+        return response.choices[0].message.content.strip()
+
+    def format_entries(entries):
+        text = ""
+        for entry in entries:
+            text += (
+                f"Source: {entry.get('source', 'Unknown')}\n"
+                f"Title: {entry.get('title', 'N/A')}\n"
+                f"Authors: {entry.get('authors', 'N/A')}\n"
+                f"Published: {entry.get('published', 'N/A')}\n"
+                f"DOI/Link: {entry.get('doi', 'N/A')}\n"
+                f"Content: {entry.get('abstract', 'N/A')}\n"
+                + "-" * 50 + "\n"
+            )
+        return text
+
+    def summarize_batch(entries, source_name, prompt_intro):
+        source_header = f"--- Source: {source_name} ---\n\n"
+        prompt = prompt_intro + source_header + format_entries(entries)
+        return call_openai(prompt)
+
+    total_results = len(all_results)
+    final_summaries = []
+
+    # Prompt templates with explicit source citation reminder
+    batch_prompt_template = (
+        "Summarize the following literature in bullet points, max 200 words. "
+        "Include key findings, consensus, and cite sources explicitly as shown. "
+        "Be concise and omit irrelevant information. "
+        "End the summary with the phrase: [END SUMMARY]\n\n"
     )
 
-    return response.choices[0].message.content
+    one_shot_prompt_template = (
+        "Summarize the following literature in bullet points, max 200 words. "
+        "Include key findings, consensus, and cite sources explicitly as shown. "
+        "Be concise and omit irrelevant information. "
+        "End the summary with the phrase: [END SUMMARY]\n\n"
+    )
+
+    combined_prompt_template = (
+        "You are given summaries from different sources. "
+        "Combine them into a final concise bullet-point summary (max 200 words). "
+        "Focus on overall trends and consensus, avoid repetition, and keep citations. "
+        "End the summary with the phrase: [END SUMMARY]\n\n"
+    )
+
+    if total_results < 12:
+        # Summarize all results at once
+        prompt = one_shot_prompt_template + format_entries(all_results)
+        final_summaries.append(call_openai(prompt))
+    else:
+        # Summarize PubMed in batches of 10
+        pubmed_entries = grouped_results.get("PubMed", [])
+        num_pubmed_batches = ceil(len(pubmed_entries) / batch_size)
+        for i in range(num_pubmed_batches):
+            batch = pubmed_entries[i * batch_size : (i + 1) * batch_size]
+            summary = summarize_batch(batch, "PubMed", batch_prompt_template)
+            final_summaries.append(f"--- PubMed batch {i+1} summary ---\n{summary}")
+
+        # Summarize bioRxiv all at once if available
+        biorxiv_entries = grouped_results.get("bioRxiv", [])
+        if biorxiv_entries:
+            summary = summarize_batch(biorxiv_entries, "bioRxiv", one_shot_prompt_template)
+            final_summaries.append(f"--- bioRxiv summary ---\n{summary}")
+
+        # Summarize Bluesky all at once if available
+        bluesky_entries = grouped_results.get("Bluesky", [])
+        if bluesky_entries:
+            summary = summarize_batch(bluesky_entries, "Bluesky", one_shot_prompt_template)
+            final_summaries.append(f"--- Bluesky summary ---\n{summary}")
+
+    # Combine all summaries into a final summary
+    combined_summaries_text = "\n\n".join(final_summaries)
+    final_prompt = combined_prompt_template + combined_summaries_text
+    overall_summary = call_openai(final_prompt)
+
+    return overall_summary
 
 
 # -------- New unified fetch function --------
