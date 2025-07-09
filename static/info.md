@@ -12,7 +12,7 @@
 **PubMed**  
 
 - You can adjust the time window as well as the filter for the PubMed search.
-- Limited to 500 search results.
+- Limited to 200 search results.
 
 **bioRxiv** 
 
@@ -27,4 +27,5 @@
 **GPT Summary** 
 
 - For best results, customize the GPT prompt to fit your specific needs.  
-- The response is limited to 1000 tokens
+- Specify the GPT's general behavior, tone, structure, and goals.
+- The response is limited to 800 tokens

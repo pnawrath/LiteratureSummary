@@ -1,15 +1,20 @@
 import re
 import feedparser
 import requests
-import openai
 import time
+import logging
 from config_file import default_config
 from Bio import Entrez
 from Bio import Medline
 from datetime import datetime, timedelta
+import openai
+from openai import OpenAIError, RateLimitError, APIError, Timeout
 from math import ceil
+from typing import List, Dict, Generator, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 config = default_config.copy()
+logger = logging.getLogger(__name__)
 
 
 # -------------- REGEX ----------------
@@ -246,46 +251,90 @@ def fetch_custom_bluesky_feed(config, limit=100):
     return results, count
 
 
-def summarize_results(all_results, grouped_results, config, batch_size=10):
-    import math
-    openai.api_key = config["openai_api_key"]
+# -------- GPT PIPELINE --------
+def batch_generator(items: List[dict], batch_size: int) -> Generator[List[dict], None, None]:
+    """
+    Yield successive batches of entries from the list.
+    """
+    for i in range(0, len(items), batch_size):
+        yield items[i : i + batch_size]
 
-    def call_openai(prompt_text):
-        response = openai.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[
-                {"role": "system", "content": config["prompt1"]},
-                {"role": "user", "content": prompt_text}
-            ],
-            max_tokens=800,
-            temperature=0.3,
-            stop=["[END SUMMARY]"]
-        )
-        return response.choices[0].message.content.strip()
 
-    def format_entries(entries):
-        text = ""
-        for entry in entries:
-            text += (
-                f"Source: {entry.get('source', 'Unknown')}\n"
-                f"Title: {entry.get('title', 'N/A')}\n"
-                f"Authors: {entry.get('authors', 'N/A')}\n"
-                f"Published: {entry.get('published', 'N/A')}\n"
-                f"DOI/Link: {entry.get('doi', 'N/A')}\n"
-                f"Content: {entry.get('abstract', 'N/A')}\n"
-                + "-" * 50 + "\n"
+def format_entries(entries: List[dict]) -> str:
+    """
+    Format a list of entries into a plain text block for OpenAI prompt.
+    """
+    formatted_chunks = []
+    for entry in entries:
+        chunk = "\n".join([
+            f"Title: {entry.get('title', 'N/A')}",
+            f"Authors: {entry.get('authors', 'N/A')}",
+            f"Published: {entry.get('published', 'N/A')}",
+            f"Content: {entry.get('abstract', 'N/A')}",
+            "-" * 10,
+        ])
+        formatted_chunks.append(chunk)
+    return "\n".join(formatted_chunks)
+
+
+def call_openai(
+    prompt_text: str,
+    api_key: str,
+    system_prompt: str,
+    timeout: int = 120,
+    max_retries: int = 3,
+    retry_delay: float = 2.0
+) -> str:
+    openai.api_key = api_key
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = openai.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt_text},
+                ],
+                max_tokens=800,
+                temperature=0.3,
+                timeout=timeout,
+                stop=["[END SUMMARY]"],
             )
-        return text
+            return response.choices[0].message.content.strip()
 
-    def summarize_batch(entries, source_name, prompt_intro):
-        source_header = f"--- Source: {source_name} ---\n\n"
-        prompt = prompt_intro + source_header + format_entries(entries)
-        return call_openai(prompt)
+        except (RateLimitError, Timeout, APIError, OpenAIError) as e:
+            logger.warning(f"OpenAI call failed on attempt {attempt}/{max_retries}: {e}")
+            if attempt == max_retries:
+                logger.error("Max retries reached. Returning empty string or fallback.")
+                return ""
+            time.sleep(retry_delay * attempt)
 
+        except Exception as e:
+            logger.error(f"Unexpected error during OpenAI call: {e}")
+            return ""
+
+
+def summarize_batch(entries, source_name, prompt_intro, api_key, system_prompt):
+    source_header = f"--- Source: {source_name} ---\n\n"
+    prompt = prompt_intro + source_header + format_entries(entries)
+    return call_openai(prompt, api_key, system_prompt)
+
+
+def summarize_results(
+    all_results: List[dict],
+    grouped_results: Dict[str, List[dict]],
+    config: dict,
+    batch_size: int = 5,
+    max_workers: int = 3,  # limit concurrency to avoid rate limits
+) -> str:
+    """
+    Summarize all results by batching large sources and combining summaries.
+    Uses concurrent threads to speed up PubMed batch summarizations.
+    """
+    api_key = config["openai_api_key"]
     total_results = len(all_results)
     final_summaries = []
+    generic_system_prompt = "You are a scientist."
 
-    # Prompt templates with explicit source citation reminder
     batch_prompt_template = (
         "Summarize the following literature in bullet points, max 200 words. "
         "Include key findings, consensus, and cite sources explicitly as shown. "
@@ -293,68 +342,78 @@ def summarize_results(all_results, grouped_results, config, batch_size=10):
         "End the summary with the phrase: [END SUMMARY]\n\n"
     )
 
-    one_shot_prompt_template = (
-        "Summarize the following literature in bullet points, max 200 words. "
-        "Include key findings, consensus, and cite sources explicitly as shown. "
-        "Be concise and omit irrelevant information. "
-        "End the summary with the phrase: [END SUMMARY]\n\n"
-    )
+    one_shot_prompt_template = batch_prompt_template
 
     combined_prompt_template = (
         "You are given summaries from different sources. "
-        "Combine them into a final concise bullet-point summary (max 200 words). "
         "Focus on overall trends and consensus, avoid repetition, and keep citations. "
+        "Write max 200 words). "
         "End the summary with the phrase: [END SUMMARY]\n\n"
     )
 
-    if total_results < 12:
-        # Summarize all results at once
-        prompt = one_shot_prompt_template + format_entries(all_results)
-        final_summaries.append(call_openai(prompt))
-    else:
-        # Summarize PubMed in batches of 10
-        pubmed_entries = grouped_results.get("PubMed", [])
-        num_pubmed_batches = ceil(len(pubmed_entries) / batch_size)
-        for i in range(num_pubmed_batches):
-            batch = pubmed_entries[i * batch_size : (i + 1) * batch_size]
-            summary = summarize_batch(batch, "PubMed", batch_prompt_template)
-            final_summaries.append(f"--- PubMed batch {i+1} summary ---\n{summary}")
+    if total_results == 0:
+        return "No literature results found to summarize."
 
-        # Summarize bioRxiv all at once if available
+    if total_results < 12:
+        # Summarize everything at once if small dataset
+        prompt = one_shot_prompt_template + format_entries(all_results)
+        final_summaries.append(call_openai(prompt, api_key, generic_system_prompt))
+    else:
+        # Summarize PubMed in parallel batches
+        pubmed_entries = grouped_results.get("PubMed", [])
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+            for i, batch in enumerate(batch_generator(pubmed_entries, batch_size), start=1):
+                futures.append(
+                    executor.submit(
+                        summarize_batch, batch, f"PubMed batch {i}", batch_prompt_template, api_key, generic_system_prompt
+                    )
+                )
+            for future in as_completed(futures):
+                summary = future.result()
+                final_summaries.append(summary)
+
+        # Summarize bioRxiv whole if present (sequential)
         biorxiv_entries = grouped_results.get("bioRxiv", [])
         if biorxiv_entries:
-            summary = summarize_batch(biorxiv_entries, "bioRxiv", one_shot_prompt_template)
+            summary = summarize_batch(biorxiv_entries, "bioRxiv", one_shot_prompt_template, api_key, generic_system_prompt)
             final_summaries.append(f"--- bioRxiv summary ---\n{summary}")
 
-        # Summarize Bluesky all at once if available
+        # Summarize Bluesky whole if present (sequential)
         bluesky_entries = grouped_results.get("Bluesky", [])
         if bluesky_entries:
-            summary = summarize_batch(bluesky_entries, "Bluesky", one_shot_prompt_template)
+            summary = summarize_batch(bluesky_entries, "Bluesky", one_shot_prompt_template, api_key, generic_system_prompt)
             final_summaries.append(f"--- Bluesky summary ---\n{summary}")
 
-    # Combine all summaries into a final summary
-    combined_summaries_text = "\n\n".join(final_summaries)
-    final_prompt = combined_prompt_template + combined_summaries_text
-    overall_summary = call_openai(final_prompt)
+    # Combine all partial summaries into a final summary (custom system prompt)
+    combined_text = "\n\n".join(final_summaries)
+    final_prompt = combined_prompt_template + combined_text
+    overall_summary = call_openai(final_prompt, api_key, config["prompt1"])
 
     return overall_summary
 
 
-# -------- New unified fetch function --------
-def fetch_all_results(config):
+# -------- Collection PIPELINE --------
+def fetch_all_results(config: dict) -> Tuple[List[dict], Dict[str, List[dict]], Dict[str, int], List[str]]:
+    """
+    Fetch results from configured sources and group them.
+    Returns:
+        all_results: flat list of all entries
+        grouped_results: dict with source keys and list of entries
+        counts: dict of counts per source
+        searched_sources: list of sources actually searched
+    """
     all_results = []
     grouped_results = {"PubMed": [], "bioRxiv": [], "Bluesky": []}
     searched_sources = []
 
-    # PubMed
     if config.get("use_pubmed", False):
         searched_sources.append("PubMed")
-        pubmed_results, pubmed_msg, pubmed_count = fetch_pubmed_results(config)
+        pubmed_results, _, pubmed_count = fetch_pubmed_results(config)
         grouped_results["PubMed"] = pubmed_results
     else:
         pubmed_count = 0
 
-    # bioRxiv
     if config.get("use_biorxiv", False):
         searched_sources.append("bioRxiv")
         biorxiv_results, biorxiv_count = fetch_biorxiv_results(config)
@@ -362,7 +421,6 @@ def fetch_all_results(config):
     else:
         biorxiv_count = 0
 
-    # Bluesky
     if config.get("use_bluesky", False):
         searched_sources.append("Bluesky")
         bluesky_results, bluesky_count = fetch_custom_bluesky_feed(config)

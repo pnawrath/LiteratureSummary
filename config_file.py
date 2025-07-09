@@ -25,8 +25,8 @@ default_config = {
     "FILTER_SCOPE": "title",
     "HELP_TEXT": HELP_TEXT,
     "prompt1": (
-        "Focus on extracting key findings, trends, or notable advances.Structure your summary as follows: write 2 "
-        "sentences highlighting the main insights followed by a bullet point section for (if present) PubMed, "
+        "Focus on extracting key findings, trends, or notable advances. Structure your summary as follows: Write 2 "
+        "brief sentences highlighting the main insights followed by a bullet point section for (if present) PubMed, "
         "bioRxiv, and Bluesky. If content is not relevant to the topic, omit it. Be succinct and professional. "
     )
 }

@@ -3,5 +3,5 @@ services:
     name: literature-summarizer
     env: python
     buildCommand: ""
-    startCommand: gunicorn app:app
+    startCommand: gunicorn app:app --timeout 120
     plan: free
