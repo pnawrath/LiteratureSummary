@@ -7,6 +7,7 @@ from config_file import default_config
 from Bio import Entrez
 from Bio import Medline
 from datetime import datetime, timedelta
+from math import ceil
 
 config = default_config.copy()
 
