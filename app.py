@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request
+from config_file import BLUESKY_FEEDS, BIORXIV_SUBJECTS, HELP_TEXT
 import core
+import markdown
 
 app = Flask(__name__)
 
@@ -9,6 +11,10 @@ def index():
     config = core.default_config.copy()  # start with defaults
     summary = ""
     status_messages = []  # Keep for any status or errors
+    subject = request.form.get("biorxiv_subject", "Immunology")
+    config["biorxiv_subject"] = subject
+    config["feed_uri"] = request.form.get("feed_uri", config["feed_uri"])
+    html_help_text = markdown.markdown(config["HELP_TEXT"])
 
     if request.method == 'POST':
         # Update config from form data
@@ -32,6 +38,7 @@ def index():
 
         # Fetch results with unified function
         all_results, grouped_results, counts, searched_sources = core.fetch_all_results(config)
+        total_results_count = sum(len(grouped_results[src]) for src in searched_sources)
 
         # Optional: add some status messages if needed
         # For example, if no results found anywhere:
@@ -39,8 +46,11 @@ def index():
             status_messages.append("No results found for your search terms in the selected sources.")
 
         # Generate GPT summary if requested and if we have results
-        if config.get("GPT_summary") and all_results:
+        summary = ""
+        if config.get("GPT_summary") and all_results and total_results_count < 100:
             summary = core.summarize_results(all_results, config).strip()
+        elif config.get("GPT_summary") and total_results_count >= 100:
+            summary = "GPT summary skipped because more than 100 results were found."
 
     else:
         # GET request — empty defaults
@@ -57,9 +67,11 @@ def index():
         grouped_results=grouped_results,
         status_messages=status_messages,
         counts=counts,
-        searched_sources=searched_sources
+        searched_sources=searched_sources,
+        biorxiv_subjects=BIORXIV_SUBJECTS,
+        bluesky_feeds=BLUESKY_FEEDS,
+        help_text=html_help_text,
     )
-
 
 if __name__ == "__main__":
     app.run(debug=True)

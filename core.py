@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 
 config = default_config.copy()
 
+
 # -------------- REGEX ----------------
 def build_patterns(config):
     broad_terms = config["broad_terms"]
@@ -34,7 +35,7 @@ def fetch_pubmed_results(config, max_retries=3, retry_delay=5):
     print("\n🔬 Fetching PubMed articles...")
 
     Entrez.email = config.get("Entrez_email", "")
-    max_results = 50
+    max_results = 500
     start_date = (datetime.now() - timedelta(days=config.get("DAYS_BACK", 30))).strftime("%Y/%m/%d")
     end_date = datetime.now().strftime("%Y/%m/%d")
 
@@ -127,7 +128,10 @@ def parse_biorxiv_date(entry):
 
 def fetch_biorxiv_results(config):
     print("\n🧬 Fetching recent bioRxiv articles...")
-    feed = feedparser.parse(config["BIORXIV_RSS_URL"])
+    subject = config.get("biorxiv_subject", "Immunology")
+    rss_url = f"https://connect.biorxiv.org/biorxiv_xml.php?subject={subject}"
+    feed = feedparser.parse(rss_url)
+
     results = []
 
     if not feed.entries:
@@ -184,7 +188,7 @@ def get_session_token(config):
     return resp.json()["accessJwt"]
 
 
-def fetch_custom_bluesky_feed(config, limit=20):
+def fetch_custom_bluesky_feed(config, limit=100):
     print("\n💬 Fetching Bluesky posts...")
     token = get_session_token(config)
     url = "https://bsky.social/xrpc/app.bsky.feed.getFeed"

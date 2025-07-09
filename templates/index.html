@@ -147,12 +147,9 @@
 
                     <!-- Collapsible How to Use content -->
                     <div class="collapse mb-3" id="howToUseBox">
-                        <div class="p-2" style="background-color: #1e293b; color: #d1d5db; border: 1px solid #5a6a55; border-radius: 6px; font-size: 0.9rem; line-height: 1.4;">
-                            Enter broad search terms for general topics (e.g., multiple sclerosis, lymphoma) and narrow terms to further filter the results (e.g., T cells, HLA-E).
-It is recommended to include both singular and plural versions of your search terms (e.g., clone, clones) for better coverage. Separate all terms with commas.
-You can adjust the time window for the PubMed search. The bioRxiv search is fixed to the latest 30 publications in immunology, and the Bluesky search covers posts from the last 7 days.
-For best results, you can customize the GPT prompt to fit your specific needs. Please note that the GPT-generated response is limited to 1000 tokens.
-                        </div>
+                      <div class="p-2" style="background-color: #1e293b; color: #d1d5db; border: 1px solid #5a6a55; border-radius: 6px; font-size: 0.9rem; line-height: 1.4;">
+                        {{ help_text | safe }}
+                      </div>
                     </div>
 
                     <div class="collapse" id="advancedSettings">
@@ -162,8 +159,11 @@ For best results, you can customize the GPT prompt to fit your specific needs. P
                         </div>
 
                         <div class="mb-3">
-                            <label for="BIORXIV_RSS_URL" class="form-label">bioRxiv RSS URL:</label>
-                            <input type="url" id="BIORXIV_RSS_URL" name="BIORXIV_RSS_URL" class="form-control" value="{{ config['BIORXIV_RSS_URL'] }}" required />
+                            <label for="FILTER_SCOPE" class="form-label">PubMed Filter Scope:</label>
+                            <select id="FILTER_SCOPE" name="FILTER_SCOPE" class="form-select">
+                                <option value="title" {% if config['FILTER_SCOPE'] == 'title' %}selected{% endif %}>Title</option>
+                                <option value="title+abstract" {% if config['FILTER_SCOPE'] == 'title+abstract' %}selected{% endif %}>Title + Abstract</option>
+                            </select>
                         </div>
 
                         <div class="mb-3">
@@ -174,11 +174,6 @@ For best results, you can customize the GPT prompt to fit your specific needs. P
                         <div class="mb-3">
                             <label for="bsky_app_password" class="form-label">App Password:</label>
                             <input type="password" id="bsky_app_password" name="bsky_app_password" class="form-control" value="{{ config['bsky_app_password'] }}" />
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="feed_uri" class="form-label">Feed URI:</label>
-                            <input type="text" id="feed_uri" name="feed_uri" class="form-control" value="{{ config['feed_uri'] }}" />
                         </div>
 
                         <div class="mb-3">
@@ -203,11 +198,25 @@ For best results, you can customize the GPT prompt to fit your specific needs. P
                     </div>
 
                     <div class="mb-3">
-                        <label for="FILTER_SCOPE" class="form-label">PubMed Filter Scope:</label>
-                        <select id="FILTER_SCOPE" name="FILTER_SCOPE" class="form-select">
-                            <option value="title" {% if config['FILTER_SCOPE'] == 'title' %}selected{% endif %}>Title</option>
-                            <option value="title+abstract" {% if config['FILTER_SCOPE'] == 'title+abstract' %}selected{% endif %}>Title + Abstract</option>
-                        </select>
+                      <label for="biorxiv_subject" class="form-label">bioRxiv Subject Area:</label>
+                      <select id="biorxiv_subject" name="biorxiv_subject" class="form-select">
+                        {% for subject in biorxiv_subjects %}
+                        <option value="{{ subject|replace(' ', '_') }}" {% if subject|replace(' ', '_') == config['biorxiv_subject'] %}selected{% endif %}>
+                          {{ subject }}
+                        </option>
+                        {% endfor %}
+                      </select>
+                    </div>
+
+                    <div class="mb-3">
+                      <label for="feed_uri" class="form-label">Bluesky Feed:</label>
+                      <select id="feed_uri" name="feed_uri" class="form-select">
+                        {% for name, uri in bluesky_feeds.items() %}
+                          <option value="{{ uri }}" {% if config['feed_uri'] == uri %}selected{% endif %}>
+                            {{ name }}
+                          </option>
+                        {% endfor %}
+                      </select>
                     </div>
 
                     <div class="mb-3">
