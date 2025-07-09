@@ -219,3 +219,21 @@ textarea {
   display: flex;
   opacity: 1;
 }
+
+.info-box h2, .info-box h3, .info-box h4 {
+  color: #a3b18a;
+  margin-top: 1rem;
+}
+
+.info-box ul {
+  padding-left: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.info-box li {
+  margin-bottom: 0.5rem;
+}
+
+.info-box p {
+  margin-bottom: 0.75rem;
+}
