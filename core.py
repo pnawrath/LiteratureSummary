@@ -277,14 +277,8 @@ def format_entries(entries: List[dict]) -> str:
     return "\n".join(formatted_chunks)
 
 
-def call_openai(
-    prompt_text: str,
-    api_key: str,
-    system_prompt: str,
-    timeout: int = 120,
-    max_retries: int = 3,
-    retry_delay: float = 2.0
-) -> str:
+def call_openai(prompt_text: str, api_key: str, system_prompt: str = "You are a helpful assistant.",
+                timeout: int = 120, max_retries: int = 3, retry_delay: float = 2.0) -> str:
     openai.api_key = api_key
     for attempt in range(1, max_retries + 1):
         try:
@@ -301,15 +295,15 @@ def call_openai(
             )
             return response.choices[0].message.content.strip()
 
-        except (RateLimitError, Timeout, APIError, OpenAIError) as e:
-            logger.warning(f"OpenAI call failed on attempt {attempt}/{max_retries}: {e}")
+        except OpenAIError as e:
+            logger.warning(f"OpenAI API call failed on attempt {attempt}/{max_retries}: {e}")
             if attempt == max_retries:
-                logger.error("Max retries reached. Returning empty string or fallback.")
+                logger.error("Max retries reached. Returning empty string.")
                 return ""
             time.sleep(retry_delay * attempt)
 
         except Exception as e:
-            logger.error(f"Unexpected error during OpenAI call: {e}")
+            logger.error(f"Unexpected error: {e}")
             return ""
 
 
