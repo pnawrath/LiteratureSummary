@@ -16,7 +16,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 config = default_config.copy()
 
 
-
 # -------------- REGEX ----------------
 def build_patterns(config):
     broad_terms = config["broad_terms"]

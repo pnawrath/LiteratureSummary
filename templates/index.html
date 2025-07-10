@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
-<body>
 <div id="loading-spinner">
   <video autoplay loop muted playsinline style="max-width: 180px; width: 100%; height: auto;">
     <source src="{{ url_for('static', filename='loading.webm') }}" type="video/webm" />
@@ -170,15 +169,19 @@
               </div>
             {% endif %}
 
-            {% if summary %}
+            {% if task_id %}
             <div class="mb-4 p-3 rounded" style="background-color:#2c3e50; color:#a3b18a;">
-
               <h3 style="color:#a3b18a; font-size: 1.5rem; margin-bottom: 15px;">Summary</h3>
-
-              <div style="white-space: pre-wrap; color:#e0e6f2; margin: 0; font-size: 1rem; line-height: 1.4;">
+              <div id="summary" style="white-space: pre-wrap; color:#e0e6f2; margin: 0; font-size: 1rem; line-height: 1.4;">
+                Generating summary...
+              </div>
+            </div>
+            {% elif summary %}
+            <div class="mb-4 p-3 rounded" style="background-color:#2c3e50; color:#a3b18a;">
+              <h3 style="color:#a3b18a; font-size: 1.5rem; margin-bottom: 15px;">Summary</h3>
+              <div id="summary" style="white-space: pre-wrap; color:#e0e6f2; margin: 0; font-size: 1rem; line-height: 1.4;">
                 {{- summary.strip() }}
               </div>
-
             </div>
             {% endif %}
 
@@ -235,6 +238,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.7/dist/umd/popper.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const form = document.querySelector("form");
@@ -246,6 +250,25 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 });
+</script>
+
+<script>
+    const taskId = "{{ task_id }}";
+    if (taskId) {
+        const checkStatus = async () => {
+            const response = await fetch(`/status/${taskId}`);
+            const data = await response.json();
+
+            if (data.status === "done") {
+                document.getElementById("summary").textContent = data.result;
+            } else if (data.status === "error") {
+                document.getElementById("summary").textContent = "❌ Error: " + data.result;
+            } else {
+                setTimeout(checkStatus, 2000); // Retry every 2 seconds
+            }
+        };
+        checkStatus();
+    }
 </script>
 
 </body>
