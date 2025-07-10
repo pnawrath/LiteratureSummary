@@ -2,7 +2,9 @@ from flask import Flask, render_template, request
 from config_file import BLUESKY_FEEDS, BIORXIV_SUBJECTS, HELP_TEXT
 import core
 import markdown
+import tracemalloc
 
+tracemalloc.start()
 app = Flask(__name__)
 
 
@@ -52,6 +54,10 @@ def index():
                 summary = core.summarize_results(all_results, grouped_results, config).strip()
             else:
                 summary = "GPT summary skipped because more than 60 results were found."
+
+        current, peak = tracemalloc.get_traced_memory()
+        print(f"Current memory usage: {current / 1024:.2f} KB")
+        print(f"Peak memory usage: {peak / 1024:.2f} KB")
 
     else:
         # GET request — empty defaults

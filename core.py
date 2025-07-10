@@ -2,7 +2,7 @@ import re
 import feedparser
 import requests
 import time
-import logging
+import gc
 from config_file import default_config
 from Bio import Entrez
 from Bio import Medline
@@ -14,7 +14,7 @@ from typing import List, Dict, Generator, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 config = default_config.copy()
-logger = logging.getLogger(__name__)
+
 
 
 # -------------- REGEX ----------------
@@ -257,7 +257,7 @@ def batch_generator(items: List[dict], batch_size: int) -> Generator[List[dict],
     Yield successive batches of entries from the list.
     """
     for i in range(0, len(items), batch_size):
-        yield items[i : i + batch_size]
+        yield items[i: i + batch_size]
 
 
 def format_entries(entries: List[dict]) -> str:
@@ -310,20 +310,24 @@ def call_openai(prompt_text: str, api_key: str, system_prompt: str = "You are a 
 def summarize_batch(entries, source_name, prompt_intro, api_key, system_prompt):
     source_header = f"--- Source: {source_name} ---\n\n"
     prompt = prompt_intro + source_header + format_entries(entries)
-    return call_openai(prompt, api_key, system_prompt)
+    summary = call_openai(prompt, api_key, system_prompt)
+    gc.collect()
+    return summary
 
 
 def summarize_results(
-    all_results: List[dict],
-    grouped_results: Dict[str, List[dict]],
-    config: dict,
-    batch_size: int = 5,
-    max_workers: int = 3,  # limit concurrency to avoid rate limits
+        all_results: List[dict],
+        grouped_results: Dict[str, List[dict]],
+        config: dict,
+        batch_size: int = 5,
+        max_workers: int = 3,
 ) -> str:
     """
     Summarize all results by batching large sources and combining summaries.
     Uses concurrent threads to speed up PubMed batch summarizations.
+    Frees memory aggressively after summarization.
     """
+
     api_key = config["openai_api_key"]
     total_results = len(all_results)
     final_summaries = []
@@ -349,37 +353,43 @@ def summarize_results(
         return "No literature results found to summarize."
 
     if total_results < 12:
-        # Summarize everything at once if small dataset
         prompt = one_shot_prompt_template + format_entries(all_results)
         final_summaries.append(call_openai(prompt, api_key, generic_system_prompt))
+        gc.collect()
     else:
-        # Summarize PubMed in parallel batches
+        # PubMed batches (parallel)
         pubmed_entries = grouped_results.get("PubMed", [])
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = []
             for i, batch in enumerate(batch_generator(pubmed_entries, batch_size), start=1):
                 futures.append(
                     executor.submit(
-                        summarize_batch, batch, f"PubMed batch {i}", batch_prompt_template, api_key, generic_system_prompt
+                        summarize_batch, batch, f"PubMed batch {i}", batch_prompt_template, api_key,
+                        generic_system_prompt
                     )
                 )
             for future in as_completed(futures):
                 summary = future.result()
                 final_summaries.append(summary)
+        gc.collect()
 
-        # Summarize bioRxiv whole if present (sequential)
+        # bioRxiv (sequential)
         biorxiv_entries = grouped_results.get("bioRxiv", [])
         if biorxiv_entries:
-            summary = summarize_batch(biorxiv_entries, "bioRxiv", one_shot_prompt_template, api_key, generic_system_prompt)
+            summary = summarize_batch(biorxiv_entries, "bioRxiv", one_shot_prompt_template, api_key,
+                                      generic_system_prompt)
             final_summaries.append(f"--- bioRxiv summary ---\n{summary}")
+            gc.collect()
 
-        # Summarize Bluesky whole if present (sequential)
+        # Bluesky (sequential)
         bluesky_entries = grouped_results.get("Bluesky", [])
         if bluesky_entries:
-            summary = summarize_batch(bluesky_entries, "Bluesky", one_shot_prompt_template, api_key, generic_system_prompt)
+            summary = summarize_batch(bluesky_entries, "Bluesky", one_shot_prompt_template, api_key,
+                                      generic_system_prompt)
             final_summaries.append(f"--- Bluesky summary ---\n{summary}")
+            gc.collect()
 
-    # Combine all partial summaries into a final summary (custom system prompt)
+    # Combine summaries using user-defined prompt
     combined_text = "\n\n".join(final_summaries)
     final_prompt = combined_prompt_template + combined_text
     overall_summary = call_openai(final_prompt, api_key, config["prompt1"])
