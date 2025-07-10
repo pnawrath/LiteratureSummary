@@ -3,17 +3,19 @@ import feedparser
 import requests
 import time
 import gc
+import os
 from config_file import default_config
 from Bio import Entrez
 from Bio import Medline
 from datetime import datetime, timedelta
 import openai
-from openai import OpenAIError, RateLimitError, APIError, Timeout
+from openai import OpenAIError, OpenAI
 from math import ceil
 from typing import List, Dict, Generator, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 config = default_config.copy()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 # -------------- REGEX ----------------
@@ -26,14 +28,37 @@ def build_patterns(config):
 
 
 # --------- FUNCTION DEFINITIONS ---------
-def build_pubmed_query(terms, start_date, end_date, field="Title/Abstract"):
-    formatted_terms = [
-        f'"{term}"[{field}]' if " " in term else f'{term}[{field}]'
-        for term in terms
-    ]
-    terms_query = "(" + " OR ".join(formatted_terms) + ")"
+def build_pubmed_boolean_query(broad_terms, narrow_terms, start_date, end_date, field="Title/Abstract"):
+    # Map config values to proper PubMed field tags
+    field_map = {
+        "title": "Title",
+        "title/abstract": "Title/Abstract"
+    }
+    pubmed_field = field_map.get(field.lower(), "Title/Abstract")
+
+    def format_terms(terms):
+        return " OR ".join(
+            f'"{term}"[{pubmed_field}]' if " " in term else f'{term}[{pubmed_field}]'
+            for term in terms
+        )
+
+    broad_query = f"({format_terms(broad_terms)})" if broad_terms else ""
+    narrow_query = f"({format_terms(narrow_terms)})" if narrow_terms else ""
+
+    if broad_query and narrow_query:
+        terms_query = f"{broad_query} AND {narrow_query}"
+    elif broad_query:
+        terms_query = broad_query
+    elif narrow_query:
+        terms_query = narrow_query
+    else:
+        terms_query = ""
+
     date_filter = f'("{start_date}"[PDAT] : "{end_date}"[PDAT])'
-    return f"{terms_query} AND {date_filter}"
+    if terms_query:
+        return f"{terms_query} AND {date_filter}"
+    else:
+        return date_filter
 
 
 def fetch_pubmed_results(config, max_retries=3, retry_delay=5):
@@ -41,18 +66,31 @@ def fetch_pubmed_results(config, max_retries=3, retry_delay=5):
 
     Entrez.email = config.get("Entrez_email", "")
     max_results = 500
-    start_date = (datetime.now() - timedelta(days=config.get("DAYS_BACK", 30))).strftime("%Y/%m/%d")
+    source_name = "PubMed"
+    fetch_type = "medline"
+    fetch_mode = "text"
+
+    # Dates
+    days_back = config.get("DAYS_BACK", 30)
+    start_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
     end_date = datetime.now().strftime("%Y/%m/%d")
 
-    search_query = " OR ".join(config.get("broad_terms", []))
+    # Terms and field
+    broad_terms = config.get("broad_terms", [])
+    narrow_terms = config.get("narrow_terms", [])
+    field = config.get("FILTER_SCOPE", "title")  # default is "title"
+
+    # Build the query
+    search_query = build_pubmed_boolean_query(broad_terms, narrow_terms, start_date, end_date, field=field)
     if not search_query:
-        print("⚠️ No broad terms defined. Skipping PubMed search.")
-        return [], "⚠️ No broad terms defined.", 0
+        warning = "⚠️ No search terms defined. Skipping PubMed search."
+        print(warning)
+        return [], warning, 0
 
-    print(f"🔎 PubMed query: '{search_query}', from {start_date} to {end_date}")
+    print(f"🔎 PubMed query: '{search_query}'")
 
-    attempt = 0
-    while attempt < max_retries:
+    # Search
+    for attempt in range(1, max_retries + 1):
         try:
             handle = Entrez.esearch(
                 db="pubmed",
@@ -66,56 +104,48 @@ def fetch_pubmed_results(config, max_retries=3, retry_delay=5):
             handle.close()
             break
         except Exception as e:
-            attempt += 1
             print(f"⚠️ PubMed API error: {e} (Attempt {attempt}/{max_retries})")
             if attempt < max_retries:
                 time.sleep(retry_delay)
             else:
-                print("PubMed search failed after retries.")
-                return [], "PubMed search failed after multiple attempts.", 0
+                return [], "❌ PubMed search failed after multiple attempts.", 0
 
     id_list = record.get("IdList", [])
     if not id_list:
         print("🔍 No PubMed results found.")
         return [], "No PubMed results found.", 0
 
+    # Fetch and parse details
     results = []
     try:
-        fetch_handle = Entrez.efetch(db="pubmed", id=",".join(id_list), rettype="medline", retmode="text")
-        records = Medline.parse(fetch_handle)
+        with Entrez.efetch(db="pubmed", id=",".join(id_list), rettype=fetch_type, retmode=fetch_mode) as fetch_handle:
+            for rec in Medline.parse(fetch_handle):
+                title = rec.get("TI", "No Title")
+                authors = ", ".join(rec.get("AU", []))
+                published = rec.get("DP", "Unknown")
+                abstract = rec.get("AB", "")
+                doi = ""
 
-        for rec in records:
-            title = rec.get("TI", "No Title")
-            authors = ", ".join(rec.get("AU", []))
-            published = rec.get("DP", "Unknown")
-            doi = ""
-            if "AID" in rec:
-                for aid in rec["AID"]:
+                for aid in rec.get("AID", []):
                     if "doi" in aid.lower():
                         doi = "https://doi.org/" + aid.split(" ")[0]
                         break
-            abstract = rec.get("AB", "")
 
-            if config.get("narrow_terms"):
-                if not any(term.lower() in (title + abstract).lower() for term in config["narrow_terms"]):
-                    continue
+                results.append({
+                    "source": source_name,
+                    "title": title,
+                    "authors": authors,
+                    "published": published,
+                    "doi": doi,
+                    "abstract": abstract
+                })
 
-            results.append({
-                "source": "PubMed",
-                "title": title,
-                "authors": authors,
-                "published": published,
-                "doi": doi,
-                "abstract": abstract
-            })
-
-        fetch_handle.close()
         count = len(results)
         print(f"✅ Retrieved {count} PubMed results.")
         return results, "", count
 
     except Exception as e:
-        print(f"Failed to fetch or parse PubMed details: {e}")
+        print(f"❌ Failed to fetch or parse PubMed details: {e}")
         return [], "Failed to fetch or parse PubMed details.", 0
 
 
@@ -306,6 +336,29 @@ def call_openai(prompt_text: str, api_key: str, system_prompt: str = "You are a 
             return ""
 
 
+def generate_terms_from_interest(interest_sentence, config):
+    prompt = (
+        "This is a sentence that describes the scientist's interests:\n"
+        f"\"{interest_sentence}\"\n\n"
+        "Generate up to 10 highly specific search terms based on the following research interest. The terms will be "
+        "used for a PubMed search. Strongly prefer one-word terms. Only include terms that are precise and "
+        "relevant while skipping vague or overly broad ones. Return a single comma-separated list with no numbering, "
+        "explanations, or additional text. "
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=[
+            {"role": "system", "content": "You are a biomedical literature expert."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.7,
+        max_tokens=300,
+    )
+
+    return response.choices[0].message.content
+
+
 def summarize_batch(entries, source_name, prompt_intro, api_key, system_prompt):
     source_header = f"--- Source: {source_name} ---\n\n"
     prompt = prompt_intro + source_header + format_entries(entries)
@@ -344,7 +397,7 @@ def summarize_results(
     combined_prompt_template = (
         "You are given summaries from different sources. "
         "Focus on overall trends and consensus, avoid repetition, and keep citations. "
-        "Write max 200 words). "
+        "Write max 200 words. "
         "End the summary with the phrase: [END SUMMARY]\n\n"
     )
 
@@ -390,8 +443,17 @@ def summarize_results(
 
     # Combine summaries using user-defined prompt
     combined_text = "\n\n".join(final_summaries)
-    final_prompt = combined_prompt_template + combined_text
-    overall_summary = call_openai(final_prompt, api_key, config["prompt1"])
+
+    # 🔧 Combine interest_sentence with prompt1, if interest sentence exists
+    user_interest = config.get("interest_sentence", "").strip()
+    user_prompt = config.get("prompt1", "").strip()
+    if user_interest:
+        combined_user_prompt = f"'{user_interest}'.\n\n{user_prompt}"
+    else:
+        combined_user_prompt = user_prompt
+
+    final_prompt = combined_user_prompt + combined_text
+    overall_summary = call_openai(final_prompt, api_key, combined_user_prompt)
 
     return overall_summary
 

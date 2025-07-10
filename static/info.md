@@ -1,13 +1,18 @@
 **How to use this tool?**
 
-- Enter broad comma-separated search terms (e.g., Autoimmunity).
-- Enter narrow terms to further filter the results (e.g., T cells).
+You can search either by GPT Prompt **_OR_** by entering search terms.
+
+- Describe your research interest to guide the AI.
+- Or enter broad comma-separated search terms.
+- You can enter narrow terms to further filter the results (recommended).
 
 **Tips**    
 
+- Describe your research interest well.
 - Include both singular and plural versions of your search terms (e.g., T cell, T cells).
+- Change the PubMed filter to Title+Abstract for more results
 - Use multiple broad and narrow terms for optimal filtering & results.
-- Don't find what you are looking for? Try swapping broad and narrow terms.
+
 
 **PubMed**  
 

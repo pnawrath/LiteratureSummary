@@ -5,11 +5,11 @@ import markdown
 import tracemalloc
 from threading import Thread
 import uuid
+import re
+import random
 
-tracemalloc.start()
 app = Flask(__name__)
-
-# In-memory store for background task results
+tracemalloc.start()
 task_store = {}  # task_id -> {status, result}
 
 
@@ -19,6 +19,16 @@ def run_summary_task(task_id, all_results, grouped_results, config):
         task_store[task_id] = {"status": "done", "result": result}
     except Exception as e:
         task_store[task_id] = {"status": "error", "result": str(e)}
+
+
+def extract_terms_from_gpt_output(text):
+    lines = re.split(r"\n|,|;", text)
+    terms = []
+    for line in lines:
+        cleaned = re.sub(r"^\s*\d+[\.\)]?\s*", "", line)
+        if cleaned.strip():
+            terms.append(cleaned.strip())
+    return terms
 
 
 @app.route('/status/<task_id>')
@@ -39,30 +49,60 @@ def index():
     html_help_text = markdown.markdown(config["HELP_TEXT"])
 
     if request.method == 'POST':
-        for key in config:
-            val = request.form.get(key)
-            if val is not None:
-                if key in ["use_pubmed", "use_biorxiv", "use_bluesky", "GPT_summary"]:
-                    config[key] = (val == "on")
-                elif key == "DAYS_BACK":
-                    try:
-                        config[key] = int(val)
-                    except ValueError:
-                        config[key] = core.default_config.get(key, 30)
-                elif key in ["broad_terms", "narrow_terms"]:
-                    config[key] = [t.strip() for t in val.split(",") if t.strip()]
+        interest_sentence = request.form.get("interest_sentence", "").strip()
+
+        # Parse checkboxes here (common)
+        config["GPT_summary"] = (request.form.get("GPT_summary") == "on")
+        config["use_pubmed"] = (request.form.get("use_pubmed") == "on")
+        config["use_biorxiv"] = (request.form.get("use_biorxiv") == "on")
+        config["use_bluesky"] = (request.form.get("use_bluesky") == "on")
+
+        if interest_sentence:
+            config["interest_sentence"] = interest_sentence
+
+            # Generate terms
+            gpt_output = core.generate_terms_from_interest(interest_sentence, config)
+            all_terms = extract_terms_from_gpt_output(gpt_output)
+            random.shuffle(all_terms)
+
+            # Split terms into two halves
+            half = len(all_terms) // 2
+            terms1, terms2 = all_terms[:half], all_terms[half:]
+
+            # Use terms as broad and narrow directly (only one fetch)
+            config["broad_terms"] = terms1
+            config["narrow_terms"] = terms2
+
+            all_results, grouped_results, counts, searched_sources = core.fetch_all_results(config)
+
+        else:
+            # Use existing form values
+            for key in config:
+                val = request.form.get(key)
+                if val is not None:
+                    if key in ["use_pubmed", "use_biorxiv", "use_bluesky", "GPT_summary"]:
+                        config[key] = (val == "on")
+                    elif key == "DAYS_BACK":
+                        try:
+                            config[key] = int(val)
+                        except ValueError:
+                            config[key] = core.default_config.get(key, 30)
+                    elif key in ["broad_terms", "narrow_terms"]:
+                        config[key] = [t.strip() for t in val.split(",") if t.strip()]
+                    else:
+                        config[key] = val
                 else:
-                    config[key] = val
-            else:
-                if key in ["use_pubmed", "use_biorxiv", "use_bluesky", "GPT_summary"]:
-                    config[key] = False
+                    if key in ["use_pubmed", "use_biorxiv", "use_bluesky", "GPT_summary"]:
+                        config[key] = False
 
-        all_results, grouped_results, counts, searched_sources = core.fetch_all_results(config)
-        total_results_count = sum(len(grouped_results[src]) for src in searched_sources)
+            all_results, grouped_results, counts, searched_sources = core.fetch_all_results(config)
 
-        if all(len(grouped_results[src]) == 0 for src in searched_sources):
+        total_results_count = sum(counts.values())
+
+        if total_results_count == 0:
             status_messages.append("No results found for your search terms in the selected sources.")
 
+        # Launch summary task if enabled
         if config.get("GPT_summary") and all_results:
             if total_results_count < 60:
                 task_id = str(uuid.uuid4())

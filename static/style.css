@@ -38,6 +38,12 @@ body, html {
     color: #e0e6f2;
 }
 
+.form-control::placeholder {
+  color: #d1d5db !important;
+  opacity: 0.5 !important;
+  font-style: italic;
+}
+
 /* Headings and labels */
 h3, h4, h5, label {
     color: #a3b18a; /* sage green */
@@ -198,7 +204,7 @@ textarea {
 
 /* Loading spinner overlay */
 #loading-spinner {
-  display: none;  /* hidden by default */
+  display: none; !important; /* hidden by default */
   opacity: 0;
   transition: opacity 0.4s ease;
   position: fixed;
@@ -237,3 +243,4 @@ textarea {
 .info-box p {
   margin-bottom: 0.75rem;
 }
+

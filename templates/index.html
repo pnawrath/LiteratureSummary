@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
+<body>
 <div id="loading-spinner">
   <video autoplay loop muted playsinline style="max-width: 180px; width: 100%; height: auto;">
     <source src="{{ url_for('static', filename='loading.webm') }}" type="video/webm" />
@@ -22,38 +23,29 @@
         <div class="col-md-4 col-lg-3 sidebar p-4">
 
             <div class="settings-form">
-                <h3>Literature Search</h3>
+                <h3>Recent Literature Search</h3>
                 <form method="POST">
 
-                    <!-- Button to toggle advanced settings -->
-                    <button class="btn btn-sm btn-outline-secondary mb-3" type="button" data-bs-toggle="collapse" data-bs-target="#advancedSettings" aria-expanded="false" aria-controls="advancedSettings">
-                        Advanced Settings
-                    </button>
+                    <!-- Row with buttons side by side -->
+                    <div class="d-flex gap-2 mb-3">
+                      <button class="btn btn-sm btn-outline-secondary flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#advancedSettings" aria-expanded="false" aria-controls="advancedSettings">
+                          Advanced Settings
+                      </button>
 
-                    <!-- Button to toggle How to Use -->
-                    <button class="btn btn-sm btn-outline-secondary mb-3" type="button" data-bs-toggle="collapse" data-bs-target="#howToUseBox" aria-expanded="false" aria-controls="howToUseBox">
-                        Info
-                    </button>
+                      <button class="btn btn-sm btn-outline-secondary flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#searchOptionsCollapse" aria-expanded="false" aria-controls="searchOptionsCollapse">
+                          Search Options
+                      </button>
 
-                    <!-- Collapsible How to Use content -->
-                    <div class="collapse mb-3" id="howToUseBox">
-                      <div class="p-2" style="background-color: #1e293b; color: #d1d5db; border: 1px solid #5a6a55; border-radius: 6px; font-size: 0.9rem; line-height: 1.4;">
-                        {{ help_text | safe }}
-                      </div>
+                      <button class="btn btn-sm btn-outline-secondary flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#howToUseBox" aria-expanded="false" aria-controls="howToUseBox">
+                          Info
+                      </button>
                     </div>
 
+                    <!-- Advanced Settings panel -->
                     <div class="collapse" id="advancedSettings">
                         <div class="mb-3">
                             <label for="Entrez_email" class="form-label">Entrez Email:</label>
                             <input type="email" id="Entrez_email" name="Entrez_email" class="form-control" value="{{ config['Entrez_email'] }}" required />
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="FILTER_SCOPE" class="form-label">PubMed Filter Scope:</label>
-                            <select id="FILTER_SCOPE" name="FILTER_SCOPE" class="form-select">
-                                <option value="title" {% if config['FILTER_SCOPE'] == 'title' %}selected{% endif %}>Title</option>
-                                <option value="title+abstract" {% if config['FILTER_SCOPE'] == 'title+abstract' %}selected{% endif %}>Title + Abstract</option>
-                            </select>
                         </div>
 
                         <div class="mb-3">
@@ -70,50 +62,88 @@
                             <label for="openai_api_key" class="form-label">OpenAI API Key:</label>
                             <input type="password" id="openai_api_key" name="openai_api_key" class="form-control" value="{{ config['openai_api_key'] }}" />
                         </div>
+
+                        <hr>
                     </div>
 
-                    <div class="mb-3">
-                        <label for="broad_terms" class="form-label" title="Comma-separated broad search terms.">Broad Context:</label>
-                        <textarea id="broad_terms" name="broad_terms" class="form-control" rows="3">{{ config['broad_terms']|join(', ') }}</textarea>
-                    </div>
+                    <!-- Search Options panel -->
+                    <div class="collapse" id="searchOptionsCollapse">
+                      <div class="mb-3">
+                          <label for="DAYS_BACK" class="form-label">PubMed Days Back:</label>
+                          <input type="number" id="DAYS_BACK" name="DAYS_BACK" class="form-control" value="{{ config['DAYS_BACK'] }}" min="1" max="365" />
+                      </div>
 
-                    <div class="mb-3">
-                        <label for="narrow_terms" class="form-label" title="Comma-separated narrow filter terms.">Narrow Terms:</label>
-                        <textarea id="narrow_terms" name="narrow_terms" class="form-control" rows="3">{{ config['narrow_terms']|join(', ') }}</textarea>
-                    </div>
+                      <div class="mb-3">
+                          <label for="FILTER_SCOPE" class="form-label">PubMed Filter Scope:</label>
+                          <select id="FILTER_SCOPE" name="FILTER_SCOPE" class="form-select">
+                              <option value="title" {% if config['FILTER_SCOPE'] == 'title' %}selected{% endif %}>Title</option>
+                              <option value="title+abstract" {% if config['FILTER_SCOPE'] == 'title+abstract' %}selected{% endif %}>Title + Abstract</option>
+                          </select>
+                      </div>
 
-                    <div class="mb-3">
-                        <label for="DAYS_BACK" class="form-label">PubMed Days Back:</label>
-                        <input type="number" id="DAYS_BACK" name="DAYS_BACK" class="form-control" value="{{ config['DAYS_BACK'] }}" min="1" max="365" />
-                    </div>
-
-                    <div class="mb-3">
-                      <label for="biorxiv_subject" class="form-label">bioRxiv Subject Area:</label>
-                      <select id="biorxiv_subject" name="biorxiv_subject" class="form-select">
-                        {% for subject in biorxiv_subjects %}
-                        <option value="{{ subject|replace(' ', '_') }}" {% if subject|replace(' ', '_') == config['biorxiv_subject'] %}selected{% endif %}>
-                          {{ subject }}
-                        </option>
-                        {% endfor %}
-                      </select>
-                    </div>
-
-                    <div class="mb-3">
-                      <label for="feed_uri" class="form-label">Bluesky Feed:</label>
-                      <select id="feed_uri" name="feed_uri" class="form-select">
-                        {% for name, uri in bluesky_feeds.items() %}
-                          <option value="{{ uri }}" {% if config['feed_uri'] == uri %}selected{% endif %}>
-                            {{ name }}
+                      <div class="mb-3">
+                        <label for="biorxiv_subject" class="form-label">bioRxiv Subject Area:</label>
+                        <select id="biorxiv_subject" name="biorxiv_subject" class="form-select">
+                          {% for subject in biorxiv_subjects %}
+                          <option value="{{ subject|replace(' ', '_') }}" {% if subject|replace(' ', '_') == config['biorxiv_subject'] %}selected{% endif %}>
+                            {{ subject }}
                           </option>
-                        {% endfor %}
-                      </select>
+                          {% endfor %}
+                        </select>
+                      </div>
+
+                      <div class="mb-3">
+                        <label for="feed_uri" class="form-label">Bluesky Feed:</label>
+                        <select id="feed_uri" name="feed_uri" class="form-select">
+                          {% for name, uri in bluesky_feeds.items() %}
+                            <option value="{{ uri }}" {% if config['feed_uri'] == uri %}selected{% endif %}>
+                              {{ name }}
+                            </option>
+                          {% endfor %}
+                        </select>
+                      </div>
+
+                      <div class="mb-3">
+                          <label for="prompt1" class="form-label">GPT Summary:</label>
+                          <textarea id="prompt1" name="prompt1" rows="5" class="form-control">{{ config['prompt1'] }}</textarea>
+                      </div>
+                        <hr>
+                    </div>
+
+                    <!-- Info Box -->
+                    <div class="collapse mb-3" id="howToUseBox">
+                      <div class="p-2" style="background-color: #1e293b; color: #d1d5db; border: 1px solid #5a6a55; border-radius: 6px; font-size: 0.9rem; line-height: 1.4;">
+                        {{ help_text | safe }}
+                      </div>
+                    </div>
+
+                    <!-- Search Boxes -->
+                    <div class="mb-3">
+                      <label for="interest_sentence" class="form-label">GPT Search (prototype)</label>
+                      <textarea id="interest_sentence" name="interest_sentence" class="form-control" rows="2"
+  placeholder="Describe your search interest...">{{ config['interest_sentence'] if config['interest_sentence'] else '' }}</textarea>
+
+                    </div>
+
+                    <hr>
+
+                    <p class="mb-2"><em>OR enter search-terms manually:</em></p>
+
+                    <div class="mb-3">
+                      <label for="broad_terms" class="form-label" title="Comma-separated broad search terms.">Broad Terms</label>
+                      <textarea id="broad_terms" name="broad_terms" class="form-control" rows="2"
+  placeholder="e.g. multiple sclerosis, autoimmunity">{{ config['broad_terms']|join(', ') if config['broad_terms'] else '' }}</textarea>
                     </div>
 
                     <div class="mb-3">
-                        <label for="prompt1" class="form-label">GPT Prompt:</label>
-                        <textarea id="prompt1" name="prompt1" rows="5" class="form-control">{{ config['prompt1'] }}</textarea>
+                      <label for="narrow_terms" class="form-label" title="Comma-separated narrow filter terms.">Narrow Terms (optional)</label>
+                      <textarea id="narrow_terms" name="narrow_terms" class="form-control" rows="2"
+  placeholder="e.g. CD8, TCR, clonal, T cells">{{ config['narrow_terms']|join(', ') if config['narrow_terms'] else '' }}</textarea>
                     </div>
 
+                    <hr>
+
+                    <!-- Toggle Boxes -->
                     <div class="form-check mb-2">
                         <input type="checkbox" id="use_pubmed" name="use_pubmed" class="form-check-input" {% if config['use_pubmed'] %}checked{% endif %} />
                         <label class="form-check-label" for="use_pubmed">PubMed</label>
@@ -134,7 +164,9 @@
                         <label class="form-check-label" for="GPT_summary">Generate GPT Summary</label>
                     </div>
 
+                    <!-- RUN Button -->
                     <button type="submit" class="btn btn-primary w-100">Run Search</button>
+
                 </form>
             </div>
 
@@ -253,22 +285,24 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 
 <script>
-    const taskId = "{{ task_id }}";
-    if (taskId) {
-        const checkStatus = async () => {
-            const response = await fetch(`/status/${taskId}`);
-            const data = await response.json();
+  const taskId = "{{ task_id }}";
+  if (taskId) {
+    const checkStatus = async () => {
+      const response = await fetch(`/status/${taskId}`);
+      const data = await response.json();
 
-            if (data.status === "done") {
-                document.getElementById("summary").textContent = data.result;
-            } else if (data.status === "error") {
-                document.getElementById("summary").textContent = "❌ Error: " + data.result;
-            } else {
-                setTimeout(checkStatus, 2000); // Retry every 2 seconds
-            }
-        };
-        checkStatus();
-    }
+      if (data.status === "done") {
+        document.getElementById("summary").textContent = data.result;
+        document.getElementById("loading-spinner").classList.remove("show");
+      } else if (data.status === "error") {
+        document.getElementById("summary").textContent = "❌ Error: " + data.result;
+        document.getElementById("loading-spinner").classList.remove("show");
+      } else {
+        setTimeout(checkStatus, 2000);
+      }
+    };
+    checkStatus();
+  }
 </script>
 
 </body>

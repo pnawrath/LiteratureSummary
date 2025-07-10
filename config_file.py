@@ -17,16 +17,15 @@ default_config = {
     "use_biorxiv": True,
     "use_bluesky": False,
     "GPT_summary": False,
-    "broad_terms": ["Comma-separated terms e.g.:", "multiple sclerosis", "MS", "autoimmunity"
-                    ],
-    "narrow_terms": ["e.g.:", "T cells", "CD8", "TCR"
-                     ],
-    "DAYS_BACK": 7,
+    "broad_terms": [],
+    "narrow_terms": [],
+    "DAYS_BACK": 14,
+    "interest_sentence": "",
     "FILTER_SCOPE": "title",
     "HELP_TEXT": HELP_TEXT,
     "prompt1": (
         "Focus on extracting key findings, trends, or notable advances. Structure your summary as follows: Write 2 "
-        "brief sentences highlighting the main insights followed by a bullet point section for (if present) PubMed, "
+        "brief sentences highlighting the main insights followed by a bullet-point section for (if present) PubMed, "
         "bioRxiv, and Bluesky. If content is not relevant to the topic, omit it. Be succinct and professional. "
     )
 }
