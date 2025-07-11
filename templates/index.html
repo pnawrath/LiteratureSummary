@@ -285,25 +285,25 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 
 <script>
-  const taskId = "{{ task_id }}";
-  if (taskId) {
-    const checkStatus = async () => {
-      const response = await fetch(`/status/${taskId}`);
-      const data = await response.json();
+    const taskId = "{{ task_id }}";
 
-      if (data.status === "done") {
-        document.getElementById("summary").textContent = data.result;
-        document.getElementById("loading-spinner").classList.remove("show");
-      } else if (data.status === "error") {
-        document.getElementById("summary").textContent = "❌ Error: " + data.result;
-        document.getElementById("loading-spinner").classList.remove("show");
-      } else {
-        setTimeout(checkStatus, 2000);
-      }
-    };
-    checkStatus();
-  }
+    if (taskId && taskId !== "None") {
+        const checkStatus = async () => {
+            const response = await fetch(`/status/${taskId}`);
+            const data = await response.json();
+
+            if (data.status === "done") {
+                document.getElementById("summary").textContent = data.result;
+            } else if (data.status === "error") {
+                document.getElementById("summary").textContent = "❌ Error: " + data.result;
+            } else {
+                setTimeout(checkStatus, 2000); // Retry every 2 seconds
+            }
+        };
+        checkStatus();
+    }
 </script>
+
 
 </body>
 </html>

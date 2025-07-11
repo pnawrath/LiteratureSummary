@@ -33,6 +33,8 @@ def extract_terms_from_gpt_output(text):
 
 @app.route('/status/<task_id>')
 def task_status(task_id):
+    if task_id == "None":
+        return jsonify({"status": "invalid", "result": ""})
     return jsonify(task_store.get(task_id, {"status": "unknown", "result": ""}))
 
 
