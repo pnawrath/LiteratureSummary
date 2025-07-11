@@ -341,7 +341,7 @@ def generate_terms_from_interest(interest_sentence, config):
         "This is a sentence that describes the scientist's interests:\n"
         f"\"{interest_sentence}\"\n\n"
         "Generate up to 10 highly specific search terms based on the following research interest. The terms will be "
-        "used for a PubMed search. Strongly prefer one-word terms. Only include terms that are precise and "
+        "used for a PubMed search. Strongly prefer one-word terms but do not fuse words. Only include terms that are precise and "
         "relevant while skipping vague or overly broad ones. Return a single comma-separated list with no numbering, "
         "explanations, or additional text. "
     )
