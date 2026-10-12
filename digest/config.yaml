@@ -1,0 +1,84 @@
+# Literature Digest configuration.
+# Every source URL lives here so a renamed feed only needs a one-line change.
+
+# Folder inside your Obsidian vault that the digest owns. The script reads
+# only <vault>/<folder>/interests.md and writes only inside <folder>.
+folder: "Literature Digest"
+
+# Look-back window (days) used on the first run; afterwards the window runs
+# from the last successful issue, capped at max_days_back.
+days_back: 7
+max_days_back: 21
+
+claude:
+  # Runs through the Claude Code CLI (`claude -p`) with your Claude login,
+  # so there is no API key and no per-use bill.
+  binary: ""                # empty = find `claude` on PATH
+  model: opus
+  triage_effort: low        # scoring every abstract against interests.md
+  editor_effort: high       # choosing and describing the week's papers
+  triage_batch_size: 60
+  shortlist_size: 45        # papers handed to the editor
+  min_score: 5              # 0-10; below this a paper never reaches the issue
+  timeout_s: 900
+
+pubmed:
+  email_env: ENTREZ_EMAIL
+  max_results: 600
+  # Each query is ANDed with the date window and the exclusion filter.
+  queries:
+    tcr: >-
+      ("T cell receptor"[tiab] OR "T-cell receptor"[tiab] OR TCR[tiab] OR TCRs[tiab]
+      OR "peptide-MHC"[tiab] OR pMHC[tiab] OR "HLA-peptide"[tiab]
+      OR "cross-reactivity"[tiab] OR "cross-reactive T"[tiab] OR "T cell specificity"[tiab]
+      OR "T-cell specificity"[tiab] OR "TCR repertoire"[tiab] OR "TCR-pMHC"[tiab])
+    ebv_ms: >-
+      ("Epstein-Barr"[tiab] OR EBV[tiab] OR EBNA1[tiab] OR "herpesvirus 4"[tiab])
+      AND ("multiple sclerosis"[tiab] OR demyelinat*[tiab] OR neuroinflammat*[tiab])
+    cd8_ms: >-
+      ("CD8"[tiab] OR "cytotoxic T"[tiab]) AND ("multiple sclerosis"[tiab])
+    t_cell_methods: >-
+      ("T cell"[tiab] OR "T cells"[tiab] OR "T-cell"[tiab])
+      AND (method*[ti] OR platform[ti] OR screen*[ti] OR "deep learning"[tiab]
+      OR "machine learning"[tiab] OR "language model"[tiab] OR "structure prediction"[tiab]
+      OR AlphaFold[tiab] OR "single-cell"[ti])
+  exclude: >-
+    NOT (erratum[pt] OR "published erratum"[pt] OR comment[pt] OR editorial[pt]
+    OR "case reports"[pt] OR "retraction of publication"[pt])
+
+biorxiv:
+  # bioRxiv/medRxiv are run by openRxiv; if the domain changes, edit these.
+  api_url: "https://api.biorxiv.org/details/biorxiv/{start}/{end}/{cursor}?category=immunology"
+  rss_fallback: "https://connect.biorxiv.org/biorxiv_xml.php?subject=immunology"
+
+# Journal tables of contents. "general: true" journals contribute only their
+# immunology-relevant papers (the triage step decides).
+journals:
+  - name: Nature Immunology
+    url: https://www.nature.com/ni.rss
+  - name: Immunity
+    url: https://www.cell.com/immunity/inpress.rss
+  - name: Science Immunology
+    url: https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=sciimmunol
+  - name: Journal of Experimental Medicine
+    url: https://rupress.org/rss/site_1000003/1000004.xml
+  - name: European Journal of Immunology
+    url: https://onlinelibrary.wiley.com/feed/15214141/most-recent
+  - name: Cell
+    url: https://www.cell.com/cell/inpress.rss
+    general: true
+  - name: Science
+    url: https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=science
+    general: true
+  - name: Nature
+    url: https://www.nature.com/nature.rss
+    general: true
+  - name: PNAS
+    url: https://www.pnas.org/action/showFeed?type=etoc&feed=rss&jc=pnas
+    general: true
+
+bluesky:
+  max_posts_per_feed: 300
+  feeds:
+    ImmunoSky: at://did:plc:rwkarouaeku2g6qkvqkirwa5/app.bsky.feed.generator/ImmunoSky
+    T cells in MS: at://did:plc:g3xk2d3jg6dma5glgwilyiyp/app.bsky.feed.generator/aaaknfoyzxnfa
