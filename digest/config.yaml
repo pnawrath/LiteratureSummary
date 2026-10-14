@@ -81,6 +81,18 @@ journals:
 
 bluesky:
   max_posts_per_feed: 300
+  # Keyword searches are the reliable part: custom feeds go quiet without warning.
+  searches:
+    - "TCR specificity"
+    - "TCR repertoire"
+    - "peptide-MHC"
+    - "pMHC"
+    - "cross-reactive T cells"
+    - "T cell receptor structure"
+    - "EBV multiple sclerosis"
+    - "CD8 T cells"
+  # Bluesky lists of people whose posts you want (at:// URIs of app.bsky.graph.list).
+  lists: {}
   feeds:
     ImmunoSky: at://did:plc:rwkarouaeku2g6qkvqkirwa5/app.bsky.feed.generator/ImmunoSky
     T cells in MS: at://did:plc:g3xk2d3jg6dma5glgwilyiyp/app.bsky.feed.generator/aaaknfoyzxnfa

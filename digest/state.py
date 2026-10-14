@@ -80,6 +80,16 @@ def drop_seen(items, state):
     return fresh, len(items) - len(fresh)
 
 
+def count_mentions(item, posts):
+    """How many posts link to this paper. Matched on DOI, which is the one
+    identifier that survives a publisher's redirects."""
+    doi = item.get("doi")
+    if not doi:
+        return 0
+    return sum(1 for p in posts if doi in (p.get("link") or "").lower()
+               or doi in (p.get("text") or "").lower())
+
+
 def iso_week(today: date):
     y, w, _ = today.isocalendar()
     return f"{y}-W{w:02d}"
