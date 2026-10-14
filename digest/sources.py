@@ -45,11 +45,34 @@ def normalize_doi(doi):
     return doi if doi.startswith("10.") else ""
 
 
+def surname(name):
+    """Reduce any feed's author spelling to a bare surname: "Wang N", "Walters,
+    L. C.", "Paul Bunk" and "Thomas PG" all become one word."""
+    name = re.sub(r"\s*\(.*?\)", "", clean(name))
+    if "," in name:                       # "Walters, L. C." -> "Walters"
+        name = name.split(",")[0]
+    else:
+        parts = [p for p in name.split() if p]
+        if not parts:
+            return ""
+        last = parts[-1]
+        # Trailing initials ("Wang N", "Thomas PG") leave the surname before them.
+        if len(parts) > 1 and (last.isupper() or re.fullmatch(r"(?:[A-Z]\.?)+", last)):
+            parts = parts[:-1]
+        # Keep particles: "van der Merwe PA" -> "van der Merwe".
+        i = len(parts) - 1
+        while i > 0 and parts[i - 1][:1].islower():
+            i -= 1
+        name = " ".join(parts[i:])
+    return name.strip(".,").strip()
+
+
 def short_authors(names):
+    names = [surname(n) for n in names]
     names = [n for n in names if n]
     if not names:
         return ""
-    return names[0] if len(names) == 1 else f"{names[0]} et al."
+    return f"{names[0]} et al." if len(names) > 1 else names[0]
 
 
 def _get(url, **kwargs):
