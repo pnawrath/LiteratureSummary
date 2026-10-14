@@ -61,7 +61,8 @@ journals:
   - name: Science Immunology
     url: https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=sciimmunol
   - name: Journal of Experimental Medicine
-    url: https://rupress.org/rss/site_1000003/1000004.xml
+    # Latest articles as published online; the 1000004.xml feed only lists the monthly issue.
+    url: https://rupress.org/rss/site_1000003/LatestArticles_1000004.xml
   - name: European Journal of Immunology
     url: https://onlinelibrary.wiley.com/feed/15214141/most-recent
   - name: Cell
@@ -74,8 +75,9 @@ journals:
     url: https://www.nature.com/nature.rss
     general: true
   - name: PNAS
-    url: https://www.pnas.org/action/showFeed?type=etoc&feed=rss&jc=pnas
-    general: true
+    # Immunology and Inflammation section. The full eTOC lists only the latest
+    # weekly issue, whose papers went online before the weekly window.
+    url: https://www.pnas.org/action/showFeed?type=searchTopic&taxonomyCode=topic&tagCode=immun&jc=pnas&feed=rss
 
 bluesky:
   max_posts_per_feed: 300
