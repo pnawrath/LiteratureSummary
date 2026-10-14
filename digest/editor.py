@@ -102,7 +102,7 @@ Sections (an id appears in at most one section; empty sections are fine):
 - preprints: every other selected preprint, whatever its topic.
 - ebv_ms, tcr, methods: selected journal papers by topic.
 - social_media: what people in the field are saying this week. Name the paper or topic
-  and what the reaction was. Never mention the shortlist, the posts as a dataset, or counts., praising or criticising. Skip if nothing stands out.
+  and what the reaction was. Never mention the shortlist, the posts as a dataset, or counts. Skip if nothing stands out.
 - notable: other journal papers worth a glance, including big immunology stories.
 - off_topic: 1-3 general-interest pieces (news features, essays) if any are good.
 - editorial: one or two sentences about the week, or empty if there is nothing concrete to say.
