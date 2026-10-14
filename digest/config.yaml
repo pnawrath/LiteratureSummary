@@ -14,7 +14,7 @@ claude:
   # Runs through the Claude Code CLI (`claude -p`) with your Claude login,
   # so there is no API key and no per-use bill.
   binary: ""                # empty = find `claude` on PATH
-  model: opus
+  model: sonnet
   triage_effort: low        # scoring every abstract against interests.md
   editor_effort: high       # choosing and describing the week's papers
   triage_batch_size: 60
