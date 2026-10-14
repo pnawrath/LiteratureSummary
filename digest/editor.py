@@ -32,6 +32,10 @@ class Pick(BaseModel):
     line: str = Field(description="One plain sentence, or empty")
 
 
+class Terms(BaseModel):
+    terms: List[str] = Field(description="Up to 8 short PubMed search terms")
+
+
 class Issue(BaseModel):
     editorial: str = Field(description="One or two plain sentences on the week, or empty")
     front_page: List[Pick] = Field(description="The 3-5 papers this reader must not miss")
@@ -60,6 +64,19 @@ research paper), scored by how interesting it is to a curious scientist; other =
 
 Be strict: most items each week should score below 5. Apply the reader's exclusions
 literally. Return a score for every id given."""
+
+TERMS_RULES = """Below are this week's posts from the T cell and immunology community.
+
+Name up to 8 topics that the field is discussing this week and that a PubMed search
+should pick up: a protein, gene, cell type, disease, method or technique. Prefer the
+ones that look like a paper people are reacting to.
+
+Rules:
+- Each term is one to three words, as it would appear in a title or abstract.
+- Skip anything the reader's interests sheet already covers, and skip generic words
+  such as immunology, T cell, paper, preprint, science.
+- Skip grants, jobs, conferences, politics and personal news.
+- Return fewer terms, or none, rather than padding the list."""
 
 STYLE = """Write the way a scientist talks to a colleague over coffee. Plain words, short sentences.
 - Say what was done and what came out, using the concrete nouns and numbers in the abstract.
@@ -151,6 +168,24 @@ class Editor:
                 error = str(result.get("result") or result.get("subtype") or "unknown error")
         raise RuntimeError(f"Claude Code call failed: {error}")
 
+    def suggest_terms(self, posts, limit=8):
+        """Search terms taken from what the field is posting about this week."""
+        ranked = sorted(posts, key=lambda p: (p.get("followed", False),
+                                              p["likes"] + 2 * p["reposts"]), reverse=True)
+        lines = [f"- {p['text']}" + (f" [link: {p['link_title']}]" if p["link_title"] else "")
+                 for p in ranked[:200]]
+        if not lines:
+            return []
+        out = self._call(TERMS_RULES, "\n".join(lines), Terms,
+                         self.cfg.get("triage_effort", "low"))
+        seen, terms = set(), []
+        for t in out.terms:
+            t = " ".join(t.split())[:60]
+            if t and t.lower() not in seen:
+                seen.add(t.lower())
+                terms.append(t)
+        return terms[:limit]
+
     def triage(self, papers):
         size = self.cfg.get("triage_batch_size", 60)
         scores = {}
@@ -174,8 +209,10 @@ class Editor:
             buzz = f" | discussed in {p['_buzz']} posts" if p.get("_buzz") else ""
             lines.append(f"[{p['_id']}] {p['title']} | {p['journal']} | {p['kind']} | "
                          f"desk guess: {p['_desk']}{buzz}\n{p['abstract'][:2500] or '(no abstract)'}")
-        top_posts = sorted(posts, key=lambda p: p["likes"] + 2 * p["reposts"], reverse=True)[:150]
-        post_lines = [f"- @{p['author']} ({p['likes']} likes): {p['text']}"
+        top_posts = sorted(posts, key=lambda p: (p.get("followed", False),
+                                                 p["likes"] + 2 * p["reposts"]), reverse=True)[:150]
+        post_lines = [f"- @{p['author']}{' (you follow them)' if p.get('followed') else ''}"
+                      f" ({p['likes']} likes): {p['text']}"
                       + (f" [link: {p['link_title']}]" if p["link_title"] else "") for p in top_posts]
         content = ("<shortlist>\n" + "\n\n".join(lines) + "\n</shortlist>\n\n"
                    "<bluesky>\n" + ("\n".join(post_lines) or "(no posts)") + "\n</bluesky>")

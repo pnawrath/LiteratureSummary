@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 
 from . import render, sources
 from .editor import Editor
-from .state import State, count_mentions, drop_seen, iso_week, merge_duplicates
+from .state import People, State, count_mentions, drop_seen, iso_week, merge_duplicates
 
 HERE = Path(__file__).resolve().parent
 load_dotenv(HERE / ".env")  # ENTREZ_EMAIL, optional BSKY_HANDLE / BSKY_APP_PASSWORD
@@ -68,11 +68,40 @@ def main(argv=None):
     start, end = sources.window(cfg, state.last_run)
     log(f"Window {start} to {end}")
 
-    papers, posts, problems = sources.fetch_everything(cfg, start, end)
+    bcfg = cfg.get("bluesky", {})
+    handles = bcfg.get("follows_of") or []
+    people = People(root / ".state" / "follows.json")
+    early = []
+    if handles and people.stale(handles, today):
+        log(f"Refreshing the people list from the follows of {', '.join(handles)}...")
+        found, problem = sources.fetch_follow_set(handles, bcfg.get("max_people", 2000))
+        if found:
+            people.update(found, handles, today)
+        if problem:
+            early.append(problem)
+    if people.people:
+        log(f"Reading {len(people.people)} people on Bluesky")
+
+    papers, posts, problems = sources.fetch_everything(cfg, start, end, people.people)
+    problems = early + problems
     counts = Counter(p["source"] for p in papers)
     log(f"Fetched {len(papers)} papers {dict(counts)} and {len(posts)} Bluesky posts")
     for p in problems:
         log(f"  problem: {p}")
+
+    if posts and bcfg.get("dynamic_terms", True) and not args.sources_only:
+        editor_for_terms = Editor(cfg, interests)
+        try:
+            terms = editor_for_terms.suggest_terms(posts)
+        except Exception as e:
+            terms, _ = [], log(f"  problem: term suggestion failed ({e})")
+        if terms:
+            log("Terms from this week's posts: " + ", ".join(terms))
+            extra, problem = sources.fetch_pubmed_terms(cfg, terms, start, end)
+            log(f"  {len(extra)} further papers from those terms")
+            papers.extend(extra)
+            if problem:
+                problems.append(problem)
 
     papers = merge_duplicates(papers)
     fresh, skipped = drop_seen(papers, state)

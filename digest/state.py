@@ -80,6 +80,34 @@ def drop_seen(items, state):
     return fresh, len(items) - len(fresh)
 
 
+class People:
+    """The set of Bluesky accounts to read, borrowed from colleagues' follow
+    lists. Refreshed weekly, because resolving follows is slow."""
+
+    def __init__(self, path: Path, max_age_days=7):
+        self.path, self.max_age = path, max_age_days
+        data = json.loads(path.read_text()) if path.exists() else {}
+        self.fetched = data.get("fetched")
+        self.people = data.get("people", {})
+        self.sources = data.get("sources", [])
+
+    def stale(self, handles, today):
+        if sorted(handles) != sorted(self.sources) or not self.people:
+            return True
+        if not self.fetched:
+            return True
+        return (today - date.fromisoformat(self.fetched)).days >= self.max_age
+
+    def update(self, people, handles, today):
+        self.people, self.sources = people, list(handles)
+        self.fetched = today.isoformat()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"fetched": self.fetched, "sources": self.sources,
+                                   "people": people}, indent=0))
+        tmp.replace(self.path)
+
+
 def count_mentions(item, posts):
     """How many posts link to this paper. Matched on DOI, which is the one
     identifier that survives a publisher's redirects."""

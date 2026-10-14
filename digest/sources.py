@@ -89,40 +89,65 @@ def _get(url, **kwargs):
 
 
 # -------- PubMed --------
-def fetch_pubmed(cfg, start, end):
+def _pubmed_fetch_ids(ids):
+    items = []
+    for i in range(0, len(ids), 200):
+        with Entrez.efetch(db="pubmed", id=",".join(ids[i:i + 200]),
+                           rettype="medline", retmode="text") as h:
+            for rec in Medline.parse(h):
+                doi = next((a.split(" ")[0] for a in rec.get("AID", []) if "[doi]" in a), "")
+                pmid = rec.get("PMID", "")
+                items.append(make_item(
+                    "PubMed", rec.get("TI", ""), rec.get("AB", ""),
+                    short_authors(rec.get("AU", [])), rec.get("DP", ""), doi,
+                    url="" if doi else f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
+                    journal=rec.get("TA", "PubMed"), pmid=pmid,
+                ))
+        time.sleep(0.4)  # NCBI allows 3 requests/s without an API key
+    return [it for it in items if it["title"]]
+
+
+def _pubmed_search(queries, window, exclude, retmax):
+    ids = []
+    for query in queries:
+        with Entrez.esearch(db="pubmed", term=f"({query}) AND {window} {exclude}",
+                            retmax=retmax) as h:
+            ids.extend(Entrez.read(h).get("IdList", []))
+        time.sleep(0.4)
+    return list(dict.fromkeys(ids))
+
+
+def _pubmed_setup(cfg, start, end):
     pcfg = cfg["pubmed"]
     Entrez.email = os.getenv(pcfg.get("email_env", "ENTREZ_EMAIL"), "")
     window = f'("{start:%Y/%m/%d}"[EDAT] : "{end:%Y/%m/%d}"[EDAT])'
-    exclude = pcfg.get("exclude", "")
-    ids = []
+    return pcfg, window, pcfg.get("exclude", "")
+
+
+def fetch_pubmed(cfg, start, end):
+    pcfg, window, exclude = _pubmed_setup(cfg, start, end)
     try:
-        for query in pcfg["queries"].values():
-            term = f"({query}) AND {window} {exclude}"
-            with Entrez.esearch(db="pubmed", term=term, retmax=pcfg.get("max_results", 600)) as h:
-                ids.extend(Entrez.read(h).get("IdList", []))
-            time.sleep(0.4)  # NCBI allows 3 requests/s without an API key
+        ids = _pubmed_search(pcfg["queries"].values(), window, exclude,
+                             pcfg.get("max_results", 600))
     except Exception as e:
         return [], f"PubMed search failed ({e})"
-
-    ids = list(dict.fromkeys(ids))
-    items = []
     try:
-        for i in range(0, len(ids), 200):
-            with Entrez.efetch(db="pubmed", id=",".join(ids[i:i + 200]),
-                               rettype="medline", retmode="text") as h:
-                for rec in Medline.parse(h):
-                    doi = next((a.split(" ")[0] for a in rec.get("AID", []) if "[doi]" in a), "")
-                    pmid = rec.get("PMID", "")
-                    items.append(make_item(
-                        "PubMed", rec.get("TI", ""), rec.get("AB", ""),
-                        short_authors(rec.get("AU", [])), rec.get("DP", ""), doi,
-                        url="" if doi else f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
-                        journal=rec.get("TA", "PubMed"), pmid=pmid,
-                    ))
-            time.sleep(0.4)
+        return _pubmed_fetch_ids(ids), None
     except Exception as e:
-        return items, f"PubMed fetch stopped early ({e})"
-    return [it for it in items if it["title"]], None
+        return [], f"PubMed fetch failed ({e})"
+
+
+def fetch_pubmed_terms(cfg, terms, start, end):
+    """A second PubMed pass for free-text terms taken from this week's posts."""
+    pcfg, window, exclude = _pubmed_setup(cfg, start, end)
+    if not terms:
+        return [], None
+    phrases = " OR ".join(f'"{t}"[tiab]' if " " in t else f"{t}[tiab]" for t in terms)
+    try:
+        ids = _pubmed_search([phrases], window, exclude, pcfg.get("term_max_results", 150))
+        return _pubmed_fetch_ids(ids), None
+    except Exception as e:
+        return [], f"PubMed term search failed ({e})"
 
 
 # -------- bioRxiv --------
@@ -271,17 +296,61 @@ def _bsky_pages(base, headers, method, params, limit, key="feed"):
             return
 
 
-def fetch_bluesky(cfg, start):
-    """Posts from custom feeds, lists and keyword searches. Feeds come and go, so
-    searches are the part that keeps working when a feed goes quiet."""
+def bsky_session(_cache={}):
+    """(base_url, headers) for Bluesky, signed in when .env has credentials."""
+    if not _cache:
+        try:
+            token = _bsky_token()
+        except Exception:
+            token = None
+        _cache["base"] = "https://bsky.social/xrpc" if token else "https://public.api.bsky.app/xrpc"
+        _cache["headers"] = {"Authorization": f"Bearer {token}"} if token else {}
+    return _cache["base"], _cache["headers"]
+
+
+def fetch_follow_set(handles, cap=2000):
+    """Everyone followed by the given accounts, as {did: handle}. Borrowing a
+    colleague's follows is the quickest way to a trustworthy people list."""
+    base, headers = bsky_session()
+    people, problems = {}, []
+    for handle in handles:
+        try:
+            for who in _bsky_pages(base, headers, "app.bsky.graph.getFollows",
+                                   {"actor": handle}, cap, key="follows"):
+                did = who.get("did")
+                if did:
+                    people[did] = who.get("handle", did)
+        except Exception as e:
+            problems.append(f"Bluesky follows of {handle} failed ({e})")
+    return people, "; ".join(problems) or None
+
+
+def fetch_people_posts(people, since, per_author=30):
+    """Recent posts from each person, skipping replies."""
+    base, headers = bsky_session()
+    posts, failed = [], 0
+    for did, handle in people.items():
+        try:
+            for entry in _bsky_pages(base, headers, "app.bsky.feed.getAuthorFeed",
+                                     {"actor": did, "filter": "posts_no_replies"},
+                                     per_author):
+                rec = _post_record(entry.get("post", {}), "people", since)
+                if rec:
+                    rec["followed"] = True
+                    posts.append(rec)
+        except Exception:
+            failed += 1
+    problem = f"Bluesky could not read {failed} of {len(people)} people" if failed else None
+    return posts, problem
+
+
+def fetch_bluesky(cfg, start, people=None):
+    """Posts from the people you follow, from custom feeds, lists and keyword
+    searches. Feeds come and go, so the people and searches carry the section
+    when a feed goes quiet."""
     bcfg = cfg.get("bluesky", {})
     since = datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc)
-    try:
-        token = _bsky_token()
-    except Exception as e:
-        return [], f"Bluesky login failed ({e})"
-    base = "https://bsky.social/xrpc" if token else "https://public.api.bsky.app/xrpc"
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    base, headers = bsky_session()
     cap = bcfg.get("max_posts_per_feed", 300)
 
     posts, problems, empty = [], [], []
@@ -301,6 +370,15 @@ def fetch_bluesky(cfg, start):
         if got == 0:
             empty.append(origin)
 
+    if people:
+        got, problem = fetch_people_posts(people, since,
+                                          bcfg.get("posts_per_person", 30))
+        posts.extend(got)
+        if problem:
+            problems.append(problem)
+        if not got:
+            empty.append(f"{len(people)} people followed")
+
     for name, uri in (bcfg.get("feeds") or {}).items():
         collect(f"feed '{name}'", "app.bsky.feed.getFeed", {"feed": uri})
     for name, uri in (bcfg.get("lists") or {}).items():
@@ -315,11 +393,15 @@ def fetch_bluesky(cfg, start):
     elif empty:
         problems.append("Bluesky sources with no posts this week: " + ", ".join(empty))
 
-    unique = {p["url"]: p for p in posts}      # a post can appear in several sources
+    handles = {h.lower() for h in (people or {}).values()}
+    unique = {}
+    for p in posts:                            # a post can appear in several sources
+        p["followed"] = p.get("followed") or p["author"].lower() in handles
+        unique.setdefault(p["url"], p)
     return list(unique.values()), "; ".join(problems) or None
 
 
-def fetch_everything(cfg, start, end):
+def fetch_everything(cfg, start, end, people=None):
     """Returns (papers, bluesky_posts, problems)."""
     papers, problems = [], []
     for fetch in (lambda: fetch_pubmed(cfg, start, end),
@@ -329,7 +411,7 @@ def fetch_everything(cfg, start, end):
         papers.extend(got)
         if problem:
             problems.append(problem)
-    posts, problem = fetch_bluesky(cfg, start)
+    posts, problem = fetch_bluesky(cfg, start, people)
     if problem:
         problems.append(problem)
     return papers, posts, problems
