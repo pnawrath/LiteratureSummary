@@ -14,17 +14,23 @@ claude:
   # Runs through the Claude Code CLI (`claude -p`) with your Claude login,
   # so there is no API key and no per-use bill.
   binary: ""                # empty = find `claude` on PATH
-  model: opus
+  model: sonnet
   triage_effort: low        # scoring every abstract against interests.md
   editor_effort: high       # choosing and describing the week's papers
   triage_batch_size: 60
-  shortlist_size: 45        # papers handed to the editor
-  min_score: 5              # 0-10; below this a paper never reaches the issue
+  shortlist_size: 30        # papers handed to the editor
+  min_score: 6              # 0-10; below this a paper never reaches the issue
   timeout_s: 900
 
 pubmed:
   email_env: ENTREZ_EMAIL
-  max_results: 600
+  # Per-week ceiling on ids fetched per query. The broad nets get a lower one
+  # of their own, because past the first ~150 best matches they return fuss.
+  max_results: 300
+  query_max_results:
+    t_cells: 120
+    t_cell_methods: 120
+  term_max_results: 60      # the extra pass on terms taken from Bluesky
   # Each query is ANDed with the date window and the exclusion filter.
   queries:
     tcr: >-
@@ -33,11 +39,13 @@ pubmed:
       OR "cross-reactivity"[tiab] OR "cross-reactive T"[tiab] OR "T cell specificity"[tiab]
       OR "T-cell specificity"[tiab] OR "TCR repertoire"[tiab] OR "TCR-pMHC"[tiab])
     # Broad T cell net, title-only so it stays about T cells rather than
-    # mentioning them. Triage against interests.md does the sorting.
+    # mentioning them. Bare CD4/CD8/MHC/HLA are left out: in a title they are
+    # mostly small clinical cohorts. Reviews are cut here but still reach the
+    # focused queries above.
     t_cells: >-
-      ("T cell"[ti] OR "T cells"[ti] OR "T-cell"[ti] OR "T-cells"[ti] OR CD8[ti]
-      OR CD4[ti] OR thymocyte*[ti] OR "Treg"[ti] OR "regulatory T"[ti]
-      OR TCR[ti] OR "MHC"[ti] OR "HLA"[ti])
+      ("T cell"[ti] OR "T cells"[ti] OR "T-cell"[ti] OR "T-cells"[ti]
+      OR thymocyte*[ti] OR "Treg"[ti] OR "regulatory T"[ti] OR TCR[ti])
+      NOT (review[pt] OR "systematic review"[pt] OR meta-analysis[pt])
     ebv_ms: >-
       ("Epstein-Barr"[tiab] OR EBV[tiab] OR EBNA1[tiab] OR "herpesvirus 4"[tiab])
       AND ("multiple sclerosis"[tiab] OR demyelinat*[tiab] OR neuroinflammat*[tiab])
@@ -84,15 +92,15 @@ journals:
     general: true
 
 bluesky:
-  max_posts_per_feed: 300
-  posts_per_person: 30
+  max_posts_per_feed: 120
+  posts_per_person: 20
   max_people: 2000
   # The people to read: everyone these accounts follow, duplicates removed.
   # Refreshed weekly and cached in the vault's .state/follows.json.
   follows_of:
     - schlender.bsky.social
     - cassotta.bsky.social
-  # Each week, take up to 8 extra PubMed search terms from what the field posts about.
+  # Each week, take up to 5 extra PubMed search terms from what the field posts about.
   dynamic_terms: true
   # Keyword searches are the reliable part: custom feeds go quiet without warning.
   # Single words beat exact phrases here: Bluesky matches a phrase literally,
@@ -100,7 +108,6 @@ bluesky:
   searches:
     - "TCR"
     - "pMHC"
-    - "T cells"
     - "thymocyte"
     - "epitope"
     - "dextramer"
