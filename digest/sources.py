@@ -229,7 +229,51 @@ def _bsky_token():
     return r.json()["accessJwt"]
 
 
+def _post_record(post, origin, since):
+    """Normalise one post, or None when it is older than the window."""
+    record = post.get("record", {})
+    created = record.get("createdAt", "")
+    try:
+        if datetime.fromisoformat(created.replace("Z", "+00:00")) < since:
+            return None
+    except ValueError:
+        pass
+    external = (post.get("embed") or {}).get("external") or {}
+    handle = post.get("author", {}).get("handle", "")
+    rkey = post.get("uri", "").rsplit("/", 1)[-1]
+    return {
+        "feed": origin,
+        "author": handle,
+        "text": clean(record.get("text", ""))[:500],
+        "link_title": clean(external.get("title", "")),
+        "link": external.get("uri", ""),
+        "likes": post.get("likeCount", 0),
+        "reposts": post.get("repostCount", 0),
+        "url": f"https://bsky.app/profile/{handle}/post/{rkey}",
+    }
+
+
+def _bsky_pages(base, headers, method, params, limit, key="feed"):
+    """Yield items from a paginated app.bsky endpoint until `limit` is reached."""
+    cursor, fetched = None, 0
+    while fetched < limit:
+        query = dict(params, limit=min(100, limit - fetched))
+        if cursor:
+            query["cursor"] = cursor
+        r = requests.get(f"{base}/{method}", params=query, headers=headers, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+        batch = data.get(key, [])
+        fetched += len(batch)
+        yield from batch
+        cursor = data.get("cursor")
+        if not batch or not cursor:
+            return
+
+
 def fetch_bluesky(cfg, start):
+    """Posts from custom feeds, lists and keyword searches. Feeds come and go, so
+    searches are the part that keeps working when a feed goes quiet."""
     bcfg = cfg.get("bluesky", {})
     since = datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc)
     try:
@@ -238,53 +282,40 @@ def fetch_bluesky(cfg, start):
         return [], f"Bluesky login failed ({e})"
     base = "https://bsky.social/xrpc" if token else "https://public.api.bsky.app/xrpc"
     headers = {"Authorization": f"Bearer {token}"} if token else {}
+    cap = bcfg.get("max_posts_per_feed", 300)
 
-    posts, problems = [], []
-    for feed_name, uri in bcfg.get("feeds", {}).items():
-        cursor, fetched = None, 0
+    posts, problems, empty = [], [], []
+
+    def collect(origin, method, params, key="feed", wrapped=True):
+        got = 0
         try:
-            while fetched < bcfg.get("max_posts_per_feed", 300):
-                params = {"feed": uri, "limit": 100}
-                if cursor:
-                    params["cursor"] = cursor
-                r = requests.get(f"{base}/app.bsky.feed.getFeed", params=params,
-                                 headers=headers, timeout=30)
-                r.raise_for_status()
-                data = r.json()
-                batch = data.get("feed", [])
-                fetched += len(batch)
-                too_old = False
-                for entry in batch:
-                    post = entry.get("post", {})
-                    record = post.get("record", {})
-                    created = record.get("createdAt", "")
-                    try:
-                        if datetime.fromisoformat(created.replace("Z", "+00:00")) < since:
-                            too_old = True
-                            continue
-                    except ValueError:
-                        pass
-                    external = (post.get("embed") or {}).get("external") or {}
-                    handle = post.get("author", {}).get("handle", "")
-                    rkey = post.get("uri", "").rsplit("/", 1)[-1]
-                    posts.append({
-                        "feed": feed_name,
-                        "author": handle,
-                        "text": clean(record.get("text", ""))[:500],
-                        "link_title": clean(external.get("title", "")),
-                        "link": external.get("uri", ""),
-                        "likes": post.get("likeCount", 0),
-                        "reposts": post.get("repostCount", 0),
-                        "url": f"https://bsky.app/profile/{handle}/post/{rkey}",
-                    })
-                cursor = data.get("cursor")
-                if not batch or not cursor or too_old:
-                    break
+            for entry in _bsky_pages(base, headers, method, params, cap, key):
+                post = entry.get("post", {}) if wrapped else entry
+                rec = _post_record(post, origin, since)
+                if rec:
+                    posts.append(rec)
+                    got += 1
         except Exception as e:
-            problems.append(f"Bluesky feed '{feed_name}' failed ({e})")
+            problems.append(f"Bluesky {origin} failed ({e})")
+            return
+        if got == 0:
+            empty.append(origin)
 
-    # Same post can appear in several feeds.
-    unique = {p["url"]: p for p in posts}
+    for name, uri in (bcfg.get("feeds") or {}).items():
+        collect(f"feed '{name}'", "app.bsky.feed.getFeed", {"feed": uri})
+    for name, uri in (bcfg.get("lists") or {}).items():
+        collect(f"list '{name}'", "app.bsky.feed.getListFeed", {"list": uri})
+    for query in bcfg.get("searches") or []:
+        collect(f"search '{query}'", "app.bsky.feed.searchPosts",
+                {"q": query, "sort": "latest", "since": since.strftime("%Y-%m-%dT%H:%M:%SZ")},
+                key="posts", wrapped=False)
+
+    if empty and not posts:
+        problems.append("Bluesky returned no posts at all (" + ", ".join(empty) + ")")
+    elif empty:
+        problems.append("Bluesky sources with no posts this week: " + ", ".join(empty))
+
+    unique = {p["url"]: p for p in posts}      # a post can appear in several sources
     return list(unique.values()), "; ".join(problems) or None
 
 

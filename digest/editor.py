@@ -84,7 +84,8 @@ Sections (an id appears in at most one section; empty sections are fine):
 - front_page: the 3-5 most important items for this reader, preprints included.
 - preprints: every other selected preprint, whatever its topic.
 - ebv_ms, tcr, methods: selected journal papers by topic.
-- social_media: what people are discussing, praising or criticising. Skip if nothing stands out.
+- social_media: what people in the field are saying this week. Name the paper or topic
+  and what the reaction was. Never mention the shortlist, the posts as a dataset, or counts., praising or criticising. Skip if nothing stands out.
 - notable: other journal papers worth a glance, including big immunology stories.
 - off_topic: 1-3 general-interest pieces (news features, essays) if any are good.
 - editorial: one or two sentences about the week, or empty if there is nothing concrete to say.
@@ -168,8 +169,11 @@ class Editor:
         return scores
 
     def write_issue(self, shortlist, posts):
-        lines = [f"[{p['_id']}] {p['title']} | {p['journal']} | {p['kind']} | desk guess: {p['_desk']}\n"
-                 f"{p['abstract'][:2500] or '(no abstract)'}" for p in shortlist]
+        lines = []
+        for p in shortlist:
+            buzz = f" | discussed in {p['_buzz']} posts" if p.get("_buzz") else ""
+            lines.append(f"[{p['_id']}] {p['title']} | {p['journal']} | {p['kind']} | "
+                         f"desk guess: {p['_desk']}{buzz}\n{p['abstract'][:2500] or '(no abstract)'}")
         top_posts = sorted(posts, key=lambda p: p["likes"] + 2 * p["reposts"], reverse=True)[:150]
         post_lines = [f"- @{p['author']} ({p['likes']} likes): {p['text']}"
                       + (f" [link: {p['link_title']}]" if p["link_title"] else "") for p in top_posts]

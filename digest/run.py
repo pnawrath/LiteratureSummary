@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 
 from . import render, sources
 from .editor import Editor
-from .state import State, drop_seen, iso_week, merge_duplicates
+from .state import State, count_mentions, drop_seen, iso_week, merge_duplicates
 
 HERE = Path(__file__).resolve().parent
 load_dotenv(HERE / ".env")  # ENTREZ_EMAIL, optional BSKY_HANDLE / BSKY_APP_PASSWORD
@@ -92,7 +92,9 @@ def main(argv=None):
         s = scores.get(i)
         if s and s.score >= ccfg.get("min_score", 5):
             ranked.append(dict(p, _id=i, _score=s.score, _desk=s.desk))
-    ranked.sort(key=lambda p: p["_score"], reverse=True)
+    for p in ranked:
+        p["_buzz"] = count_mentions(p, posts)
+    ranked.sort(key=lambda p: (p["_score"], p["_buzz"]), reverse=True)
     shortlist = ranked[:ccfg.get("shortlist_size", 45)]
     log(f"Shortlisted {len(shortlist)} of {len(fresh)}")
 
