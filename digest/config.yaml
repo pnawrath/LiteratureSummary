@@ -32,6 +32,12 @@ pubmed:
       OR "peptide-MHC"[tiab] OR pMHC[tiab] OR "HLA-peptide"[tiab]
       OR "cross-reactivity"[tiab] OR "cross-reactive T"[tiab] OR "T cell specificity"[tiab]
       OR "T-cell specificity"[tiab] OR "TCR repertoire"[tiab] OR "TCR-pMHC"[tiab])
+    # Broad T cell net, title-only so it stays about T cells rather than
+    # mentioning them. Triage against interests.md does the sorting.
+    t_cells: >-
+      ("T cell"[ti] OR "T cells"[ti] OR "T-cell"[ti] OR "T-cells"[ti] OR CD8[ti]
+      OR CD4[ti] OR thymocyte*[ti] OR "Treg"[ti] OR "regulatory T"[ti]
+      OR TCR[ti] OR "MHC"[ti] OR "HLA"[ti])
     ebv_ms: >-
       ("Epstein-Barr"[tiab] OR EBV[tiab] OR EBNA1[tiab] OR "herpesvirus 4"[tiab])
       AND ("multiple sclerosis"[tiab] OR demyelinat*[tiab] OR neuroinflammat*[tiab])
@@ -81,16 +87,28 @@ journals:
 
 bluesky:
   max_posts_per_feed: 300
+  posts_per_person: 30
+  max_people: 2000
+  # The people to read: everyone these accounts follow, duplicates removed.
+  # Refreshed weekly and cached in the vault's .state/follows.json.
+  follows_of:
+    - schlender.bsky.social
+    - cassotta.bsky.social
+  # Each week, take up to 8 extra PubMed search terms from what the field posts about.
+  dynamic_terms: true
   # Keyword searches are the reliable part: custom feeds go quiet without warning.
+  # Single words beat exact phrases here: Bluesky matches a phrase literally,
+  # and "TCR repertoire" or "T cell receptor structure" return almost nothing.
   searches:
-    - "TCR specificity"
-    - "TCR repertoire"
-    - "peptide-MHC"
+    - "TCR"
     - "pMHC"
-    - "cross-reactive T cells"
-    - "T cell receptor structure"
+    - "T cells"
+    - "thymocyte"
+    - "epitope"
+    - "dextramer"
+    - "immunopeptidome"
+    - "EBNA1"
     - "EBV multiple sclerosis"
-    - "CD8 T cells"
   # Bluesky lists of people whose posts you want (at:// URIs of app.bsky.graph.list).
   lists: {}
   feeds:
