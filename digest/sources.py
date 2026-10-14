@@ -141,12 +141,25 @@ def fetch_pubmed(cfg, start, end):
         return [], f"PubMed fetch failed ({e})"
 
 
+def _term_clause(term):
+    """A term of several words becomes an AND of those words, not a quoted
+    phrase. PubMed matches a phrase literally, so "spectral flow cytometry
+    T cell" finds nothing while the words together find the papers."""
+    words = [w for w in re.split(r"[^\w+-]+", term) if len(w) > 1]
+    if not words:
+        return ""
+    if len(words) == 1:
+        return f"{words[0]}[tiab]"
+    return "(" + " AND ".join(f"{w}[tiab]" for w in words) + ")"
+
+
 def fetch_pubmed_terms(cfg, terms, start, end):
     """A second PubMed pass for free-text terms taken from this week's posts."""
     pcfg, window, exclude = _pubmed_setup(cfg, start, end)
+    terms = [t for t in terms if _term_clause(t)]
     if not terms:
         return [], None
-    phrases = " OR ".join(f'"{t}"[tiab]' if " " in t else f"{t}[tiab]" for t in terms)
+    phrases = " OR ".join(_term_clause(t) for t in terms)
     try:
         ids = _pubmed_search([(phrases, pcfg.get("term_max_results", 60))], window, exclude)
         return _pubmed_fetch_ids(ids), None
