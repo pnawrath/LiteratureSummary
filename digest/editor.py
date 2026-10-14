@@ -135,7 +135,7 @@ class Editor:
                 except ValidationError as e:
                     error = f"invalid output ({e.error_count()} errors)"
             else:
-                error = str(result.get("result") or result.get("subtype") or "unknown error")[:300]
+                error = str(result.get("result") or result.get("subtype") or "unknown error")
         raise RuntimeError(f"Claude Code call failed: {error}")
 
     def triage(self, papers):
