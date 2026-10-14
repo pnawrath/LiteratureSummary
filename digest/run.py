@@ -92,7 +92,7 @@ def main(argv=None):
     if posts and bcfg.get("dynamic_terms", True) and not args.sources_only:
         editor_for_terms = Editor(cfg, interests)
         try:
-            terms = editor_for_terms.suggest_terms(posts)
+            terms = editor_for_terms.suggest_terms(posts, cfg["pubmed"].get("max_terms", 3))
         except Exception as e:
             terms, _ = [], log(f"  problem: term suggestion failed ({e})")
         if terms:

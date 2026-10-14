@@ -67,7 +67,7 @@ literally. Return a score for every id given."""
 
 TERMS_RULES = """Below are this week's posts from the T cell and immunology community.
 
-Name up to 8 topics that the field is discussing this week and that a PubMed search
+Name up to 3 T cell or immunology topics that the field is discussing this week and that a PubMed search
 should pick up: a protein, gene, cell type, disease, method or technique. Prefer the
 ones that look like a paper people are reacting to.
 
@@ -173,7 +173,7 @@ class Editor:
         ranked = sorted(posts, key=lambda p: (p.get("followed", False),
                                               p["likes"] + 2 * p["reposts"]), reverse=True)
         lines = [f"- {p['text']}" + (f" [link: {p['link_title']}]" if p["link_title"] else "")
-                 for p in ranked[:200]]
+                 for p in ranked[:100]]
         if not lines:
             return []
         out = self._call(TERMS_RULES, "\n".join(lines), Terms,
@@ -210,7 +210,7 @@ class Editor:
             lines.append(f"[{p['_id']}] {p['title']} | {p['journal']} | {p['kind']} | "
                          f"desk guess: {p['_desk']}{buzz}\n{p['abstract'][:2500] or '(no abstract)'}")
         top_posts = sorted(posts, key=lambda p: (p.get("followed", False),
-                                                 p["likes"] + 2 * p["reposts"]), reverse=True)[:150]
+                                                 p["likes"] + 2 * p["reposts"]), reverse=True)[:60]
         post_lines = [f"- @{p['author']}{' (you follow them)' if p.get('followed') else ''}"
                       f" ({p['likes']} likes): {p['text']}"
                       + (f" [link: {p['link_title']}]" if p["link_title"] else "") for p in top_posts]

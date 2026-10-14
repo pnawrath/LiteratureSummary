@@ -308,6 +308,13 @@ def bsky_session(_cache={}):
     return _cache["base"], _cache["headers"]
 
 
+# Followed people also post about politics, conferences and their weekend; keep
+# only posts about the science.
+TOPIC_RE = re.compile(r"t.?cells?\b|\btcrs?\b|\bcd[48]\b|immun|antigen|\bmhc|\bhla\b|epitope|"
+                      r"lymphocyte|thymo|\bebv\b|sclerosis|vaccin|antibod|infection|"
+                      r"preprint|biorxiv|doi\.org", re.IGNORECASE)
+
+
 def fetch_follow_set(handles, cap=2000):
     """Everyone followed by the given accounts, as {did: handle}. Borrowing a
     colleague's follows is the quickest way to a trustworthy people list."""
@@ -335,7 +342,7 @@ def fetch_people_posts(people, since, per_author=30):
                                      {"actor": did, "filter": "posts_no_replies"},
                                      per_author):
                 rec = _post_record(entry.get("post", {}), "people", since)
-                if rec:
+                if rec and (TOPIC_RE.search(rec["text"]) or TOPIC_RE.search(rec["link_title"])):
                     rec["followed"] = True
                     posts.append(rec)
         except Exception:

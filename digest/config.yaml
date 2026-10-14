@@ -25,6 +25,9 @@ claude:
 pubmed:
   email_env: ENTREZ_EMAIL
   max_results: 600
+  # Extra PubMed pass for terms taken from Bluesky posts: few terms, few papers each.
+  max_terms: 3
+  term_max_results: 30
   # Each query is ANDed with the date window and the exclusion filter.
   queries:
     tcr: >-
@@ -32,12 +35,21 @@ pubmed:
       OR "peptide-MHC"[tiab] OR pMHC[tiab] OR "HLA-peptide"[tiab]
       OR "cross-reactivity"[tiab] OR "cross-reactive T"[tiab] OR "T cell specificity"[tiab]
       OR "T-cell specificity"[tiab] OR "TCR repertoire"[tiab] OR "TCR-pMHC"[tiab])
-    # Broad T cell net, title-only so it stays about T cells rather than
-    # mentioning them. Triage against interests.md does the sorting.
+    # Broad T cell net, title-only and limited to core immunology, neurology and
+    # top general journals; without the journal list it doubled the weekly count
+    # (about 200 extra papers, many low quality).
     t_cells: >-
       ("T cell"[ti] OR "T cells"[ti] OR "T-cell"[ti] OR "T-cells"[ti] OR CD8[ti]
       OR CD4[ti] OR thymocyte*[ti] OR "Treg"[ti] OR "regulatory T"[ti]
       OR TCR[ti] OR "MHC"[ti] OR "HLA"[ti])
+      AND ("Nat Immunol"[ta] OR "Immunity"[ta] OR "Sci Immunol"[ta] OR "J Exp Med"[ta]
+      OR "Cell"[ta] OR "Nature"[ta] OR "Science"[ta] OR "Nat Med"[ta] OR "Sci Transl Med"[ta]
+      OR "Cancer Cell"[ta] OR "Nat Biotechnol"[ta] OR "Nat Methods"[ta] OR "Nat Commun"[ta]
+      OR "Cell Rep"[ta] OR "J Clin Invest"[ta] OR "Proc Natl Acad Sci U S A"[ta]
+      OR "Sci Adv"[ta] OR "Nat Rev Immunol"[ta] OR "Trends Immunol"[ta] OR "Immunol Rev"[ta]
+      OR "J Immunol"[ta] OR "Eur J Immunol"[ta] OR "Cell Mol Immunol"[ta]
+      OR "Mucosal Immunol"[ta] OR "Elife"[ta] OR "Neuron"[ta] OR "Brain"[ta]
+      OR "Ann Neurol"[ta] OR "Neurol Neuroimmunol Neuroinflamm"[ta] OR "Mult Scler"[ta])
     ebv_ms: >-
       ("Epstein-Barr"[tiab] OR EBV[tiab] OR EBNA1[tiab] OR "herpesvirus 4"[tiab])
       AND ("multiple sclerosis"[tiab] OR demyelinat*[tiab] OR neuroinflammat*[tiab])
@@ -86,15 +98,16 @@ journals:
     url: https://www.pnas.org/action/showFeed?type=searchTopic&taxonomyCode=topic&tagCode=immun&jc=pnas&feed=rss
 
 bluesky:
-  max_posts_per_feed: 300
-  posts_per_person: 30
+  # Kept small on purpose: more posts mostly add noise and tokens.
+  max_posts_per_feed: 50
+  posts_per_person: 10
   max_people: 2000
   # The people to read: everyone these accounts follow, duplicates removed.
   # Refreshed weekly and cached in the vault's .state/follows.json.
   follows_of:
     - schlender.bsky.social
     - cassotta.bsky.social
-  # Each week, take up to 8 extra PubMed search terms from what the field posts about.
+  # Each week, take up to pubmed.max_terms extra PubMed search terms from what the field posts about.
   dynamic_terms: true
   # Keyword searches are the reliable part: custom feeds go quiet without warning.
   # Single words beat exact phrases here: Bluesky matches a phrase literally,
