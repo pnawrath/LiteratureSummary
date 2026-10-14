@@ -11,7 +11,7 @@ import os
 import subprocess
 import sys
 from collections import Counter
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import yaml
@@ -63,6 +63,8 @@ def main(argv=None):
     interests = interests_path.read_text()
 
     state = State(root / ".state" / "seen.json")
+    if args.force:
+        state.forget_since(today - timedelta(days=today.weekday()))
     start, end = sources.window(cfg, state.last_run)
     log(f"Window {start} to {end}")
 

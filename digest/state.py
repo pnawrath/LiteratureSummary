@@ -31,6 +31,14 @@ class State:
     def is_seen(self, item):
         return any(k in self.seen for k in keys(item))
 
+    def forget_since(self, day):
+        """Undo everything recorded on or after `day`, so a rebuild of the
+        current week sees the same papers again."""
+        cutoff = day.isoformat()
+        self.seen = {k: v for k, v in self.seen.items() if v < cutoff}
+        if self.last_run and self.last_run >= cutoff:
+            self.last_run = None
+
     def mark(self, items, today):
         for it in items:
             for k in keys(it):

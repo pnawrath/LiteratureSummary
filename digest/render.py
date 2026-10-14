@@ -2,18 +2,20 @@
 from collections import Counter
 
 
-def _ref(p):
+def _entry(p, line=""):
+    """Every entry, in every section: [Title](url) · *Journal* · Author et al. · Text"""
     title = p["title"].rstrip(".").replace("[", "(").replace("]", ")")
-    link = f"[{title}]({p['url']})" if p["url"] else title
-    meta = " · ".join(x for x in (f"*{p['journal']}*", p["authors"]) if x)
-    if p["kind"] == "preprint":
-        meta += " · preprint"
-    return f"{link} · {meta}"
+    parts = [f"[{title}]({p['url']})" if p["url"] else title, f"*{p['journal']}*"]
+    if p["authors"]:
+        parts.append(p["authors"])
+    if line and line.strip():
+        parts.append(line.strip())
+    return "- " + " · ".join(parts)
 
 
-def _section(heading, picks, by_id):
-    rows = [f"- {_ref(by_id[pk.id])}  \n  {pk.line}" for pk in picks if pk.id in by_id]
-    return [f"## {heading}", *rows, ""] if rows else []
+SECTIONS = (("Front Page", "front_page"), ("Preprints", "preprints"), ("EBV & MS", "ebv_ms"),
+            ("TCR specificity & structure", "tcr"), ("Methods", "methods"))
+TAIL = (("Notable", "notable"), ("Off Topic", "off_topic"))
 
 
 def render(issue, by_id, week, start, end, stats, problems):
@@ -28,33 +30,26 @@ def render(issue, by_id, week, start, end, stats, problems):
         "---",
         f"# Week {num} · {start.day} {start:%b} to {end.day} {end:%b %Y}",
         "",
-        f"> {issue.editorial.strip()}",
-        "",
     ]
+    if issue.editorial.strip():
+        out += [f"> {issue.editorial.strip()}", ""]
 
     used = set()
-    if issue.front_page:
-        out.append("## Front page")
-        for n, pk in enumerate(issue.front_page, 1):
-            if pk.id in by_id:
+
+    def section(heading, picks):
+        rows = []
+        for pk in picks:
+            if pk.id in by_id and pk.id not in used:
                 used.add(pk.id)
-                out.append(f"{n}. **{_ref(by_id[pk.id])}**  \n   {pk.line}")
-        out.append("")
+                rows.append(_entry(by_id[pk.id], pk.line))
+        return [f"## {heading}", *rows, ""] if rows else []
 
-    for heading, picks in (("Big immunology stories", issue.big_stories),
-                           ("TCR specificity & structure", issue.tcr),
-                           ("Methods & computation", issue.methods),
-                           ("EBV & MS", issue.ebv_ms)):
-        picks = [pk for pk in picks if pk.id not in used]
-        used.update(pk.id for pk in picks)
-        out += _section(heading, picks, by_id)
-
-    if issue.bluesky:
-        out += ["## On Bluesky", *[f"- {b}" for b in issue.bluesky], ""]
-
-    notable = [i for i in issue.also_notable if i in by_id and i not in used]
-    if notable:
-        out += ["## Also notable", *[f"- {_ref(by_id[i])}" for i in notable], ""]
+    for heading, field in SECTIONS:
+        out += section(heading, getattr(issue, field))
+    if issue.social_media:
+        out += ["## Social Media", *[f"- {b}" for b in issue.social_media], ""]
+    for heading, field in TAIL:
+        out += section(heading, getattr(issue, field))
 
     per_source = Counter(stats["sources"])
     src = ", ".join(f"{k} {v}" for k, v in per_source.most_common())

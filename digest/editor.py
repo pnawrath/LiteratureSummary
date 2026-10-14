@@ -14,7 +14,7 @@ from typing import List, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
-Desk = Literal["tcr", "methods", "ebv_ms", "big_story", "other"]
+Desk = Literal["tcr", "methods", "ebv_ms", "big_story", "off_topic", "other"]
 
 
 class Score(BaseModel):
@@ -29,62 +29,73 @@ class Triage(BaseModel):
 
 class Pick(BaseModel):
     id: int
-    line: str = Field(description="One plain sentence: what was found, and why this reader cares")
+    line: str = Field(description="One plain sentence, or empty")
 
 
 class Issue(BaseModel):
-    editorial: str = Field(description="Two or three plain sentences on what moved this week")
+    editorial: str = Field(description="One or two plain sentences on the week, or empty")
     front_page: List[Pick] = Field(description="The 3-5 papers this reader must not miss")
-    big_stories: List[Pick]
+    preprints: List[Pick]
+    ebv_ms: List[Pick]
     tcr: List[Pick]
     methods: List[Pick]
-    ebv_ms: List[Pick]
-    bluesky: List[str] = Field(description="2-5 one-line bullets on what the field is discussing")
-    also_notable: List[int] = Field(description="ids worth a glance, no text")
+    social_media: List[str] = Field(description="2-5 one-line bullets on what the field is discussing")
+    notable: List[Pick] = Field(description="Worth a glance; line may be empty")
+    off_topic: List[Pick] = Field(description="1-3 general-interest pieces; line may be empty")
 
 
-TRIAGE_RULES = """You triage new immunology literature for one scientist. Their interests sheet is below.
+TRIAGE_RULES = """You triage new literature for one scientist. Their interests sheet is below.
 
-Score each paper 0-10 for how much THIS reader would want to see it:
-- 9-10: directly on a core interest, or a field-changing immunology story
+Score each item 0-10 for how much THIS reader would want to see it:
+- 9-10: directly on a core interest, or a major result in their field
 - 6-8: clearly relevant, solid work
 - 3-5: tangential
 - 0-2: off-topic or low value
 
 Desks: tcr = TCR specificity, cross-reactivity, structure, repertoire; methods = new
-experimental or computational T cell methods; ebv_ms = EBV and multiple sclerosis
-(especially CD8 T cells); big_story = a major immunology result of broad interest
-regardless of topic (usually top journals); other = anything else.
+experimental or computational T cell methods; ebv_ms = EBV and multiple sclerosis;
+big_story = a major immunology result of broad interest regardless of topic;
+off_topic = a news feature, essay or science-writing piece on a general topic (not a
+research paper), scored by how interesting it is to a curious scientist; other = anything else.
 
-Be strict: most papers each week should score below 5. Apply the reader's exclusions
+Be strict: most items each week should score below 5. Apply the reader's exclusions
 literally. Return a score for every id given."""
 
-STYLE = """Write like a sharp colleague summarising the week at lab meeting, not like a press release.
-- Plain declarative sentences. Lead with the finding: what was shown, in what system, how.
-- Concrete nouns and numbers from the abstract. If the abstract has no specifics, say less.
-- Then, briefly, why it matters to this reader, only if that is not obvious.
-- One sentence per paper, ideally under 25 words.
-- Never use: groundbreaking, novel, crucial, pivotal, landscape, underscores, highlights,
-  sheds light, paves the way, delve, intricate, robust, comprehensive, notably, unveils,
-  game-changer, exciting, promising, holistic, "this study", "the authors".
-- No em dashes, no exclamation marks, no rhetorical questions, no hedging filler."""
+STYLE = """Write the way a scientist talks to a colleague over coffee. Plain words, short sentences.
+- Say what was done and what came out, using the concrete nouns and numbers in the abstract.
+  If the abstract gives no specifics, keep the line short or leave it empty.
+- Add why it matters to this reader only when that is not obvious, in a few words.
+- One sentence per entry, ideally under 20 words.
+- No intensifiers or sales words: genuinely, truly, really, remarkably, particularly,
+  importantly, notably, novel, first-ever, groundbreaking, crucial, pivotal, key, exciting,
+  promising, robust, comprehensive, landscape, underscores, highlights, sheds light,
+  paves the way, delve, unveils.
+- No contrast framing: never "not just X", "not another X", "more than X", "X, not Y",
+  "rather than", "beyond X". State what the thing is, not what it is not.
+- No colons for effect, no em dashes, no exclamation marks, no rhetorical questions.
+- Do not start with "This paper", "This study", "The authors", "Researchers"."""
 
-EDITOR_RULES = f"""You edit a short weekly literature digest for one immunologist (interests below).
-From the shortlisted papers and Bluesky posts, choose and describe this week's papers.
+EDITOR_RULES = f"""You edit a short weekly literature digest for one scientist (interests below).
+From the shortlisted items and social media posts, choose and describe this week's items.
 
 {STYLE}
 
-- front_page: the 3-5 most important papers for this reader. Do not repeat them elsewhere.
-- Each desk: only papers that earn a place; an empty desk is fine.
-- bluesky: what people are actually discussing, praising or criticising; skip if nothing stands out.
-- editorial: two or three sentences, same style, no throat-clearing.
-- also_notable: remaining shortlisted ids worth a glance.
-- Use only ids from the shortlist. Never invent papers, numbers or authors."""
+Sections (an id appears in at most one section; empty sections are fine):
+- front_page: the 3-5 most important items for this reader, preprints included.
+- preprints: every other selected preprint, whatever its topic.
+- ebv_ms, tcr, methods: selected journal papers by topic.
+- social_media: what people are discussing, praising or criticising. Skip if nothing stands out.
+- notable: other journal papers worth a glance, including big immunology stories.
+- off_topic: 1-3 general-interest pieces (news features, essays) if any are good.
+- editorial: one or two sentences about the week, or empty if there is nothing concrete to say.
+Use only ids from the shortlist. Never invent papers, numbers or authors."""
 
 BANNED = re.compile(
-    r"groundbreaking|\bnovel\b|crucial|pivotal|landscape|underscor|highlight|sheds? light|"
-    r"paves? the way|delve|intricate|\brobust|comprehensive|notably|unveil|game.changer|"
-    r"exciting|promising|holistic|this study|the authors|—", re.IGNORECASE)
+    r"genuine|\btruly|\breally|remarkabl|particularly|importantly|notabl|\bnovel|first.ever|"
+    r"groundbreaking|crucial|pivotal|exciting|promising|\brobust|comprehensive|landscape|"
+    r"underscor|highlight|sheds? light|paves? the way|delve|unveil|game.changer|holistic|"
+    r"\bnot just\b|\bnot another\b|\bmore than (just|a)\b|\brather than\b|\bbeyond\b|"
+    r"^this (paper|study)|^the authors|^researchers|\u2014|!", re.IGNORECASE | re.MULTILINE)
 
 
 def _schema(model):
@@ -135,7 +146,7 @@ class Editor:
                 except ValidationError as e:
                     error = f"invalid output ({e.error_count()} errors)"
             else:
-                error = str(result.get("result") or result.get("subtype") or "unknown error")[:300]
+                error = str(result.get("result") or result.get("subtype") or "unknown error")
         raise RuntimeError(f"Claude Code call failed: {error}")
 
     def triage(self, papers):
@@ -178,7 +189,8 @@ class Editor:
 
 def _texts(issue):
     yield issue.editorial
-    for section in (issue.front_page, issue.big_stories, issue.tcr, issue.methods, issue.ebv_ms):
+    for section in (issue.front_page, issue.preprints, issue.ebv_ms, issue.tcr,
+                    issue.methods, issue.notable, issue.off_topic):
         for pick in section:
             yield pick.line
-    yield from issue.bluesky
+    yield from issue.social_media
