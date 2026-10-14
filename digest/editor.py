@@ -67,7 +67,7 @@ STYLE = """Write the way a scientist talks to a colleague over coffee. Plain wor
 - Add why it matters to this reader only when that is not obvious, in a few words.
 - One sentence per entry, ideally under 20 words.
 - No intensifiers or sales words: genuinely, truly, really, remarkably, particularly,
-  importantly, notably, novel, first-ever, groundbreaking, crucial, pivotal, key, exciting,
+  importantly, notably, new, newly, novel, first-ever, standout, must-read, groundbreaking, crucial, pivotal, key, exciting,
   promising, robust, comprehensive, landscape, underscores, highlights, sheds light,
   paves the way, delve, unveils.
 - No contrast framing: never "not just X", "not another X", "more than X", "X, not Y",
@@ -92,6 +92,7 @@ Use only ids from the shortlist. Never invent papers, numbers or authors."""
 
 BANNED = re.compile(
     r"genuine|\btruly|\breally|remarkabl|particularly|importantly|notabl|\bnovel|first.ever|"
+    r"\bnew(ly|est)?\b|standout|must.read|long.awaited|\bfinally\b|at last|"
     r"groundbreaking|crucial|pivotal|exciting|promising|\brobust|comprehensive|landscape|"
     r"underscor|highlight|sheds? light|paves? the way|delve|unveil|game.changer|holistic|"
     r"\bnot just\b|\bnot another\b|\bmore than (just|a)\b|\brather than\b|\bbeyond\b|"
