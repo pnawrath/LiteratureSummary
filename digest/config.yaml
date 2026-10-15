@@ -18,16 +18,20 @@ claude:
   triage_effort: low        # scoring every abstract against interests.md
   editor_effort: high       # choosing and describing the week's papers
   triage_batch_size: 60
-  shortlist_size: 45        # papers handed to the editor
-  min_score: 5              # 0-10; below this a paper never reaches the issue
+  shortlist_size: 30        # papers handed to the editor
+  min_score: 6              # 0-10; below this a paper never reaches the issue
   timeout_s: 900
 
 pubmed:
   email_env: ENTREZ_EMAIL
-  max_results: 600
-  # Extra PubMed pass for terms taken from Bluesky posts: few terms, few papers each.
+  # Per-week ceiling on ids fetched per query. The broad nets get a lower one
+  # of their own, because past the first ~150 best matches they return fuss.
+  max_results: 300
+  query_max_results:
+    t_cells: 120
+    t_cell_methods: 120
+  term_max_results: 30      # the extra pass on terms taken from Bluesky
   max_terms: 3
-  term_max_results: 30
   # Each query is ANDed with the date window and the exclusion filter.
   queries:
     tcr: >-
@@ -42,6 +46,7 @@ pubmed:
       ("T cell"[ti] OR "T cells"[ti] OR "T-cell"[ti] OR "T-cells"[ti] OR CD8[ti]
       OR CD4[ti] OR thymocyte*[ti] OR "Treg"[ti] OR "regulatory T"[ti]
       OR TCR[ti] OR "MHC"[ti] OR "HLA"[ti])
+      NOT (review[pt] OR "systematic review"[pt] OR meta-analysis[pt])
       AND ("Nat Immunol"[ta] OR "Immunity"[ta] OR "Sci Immunol"[ta] OR "J Exp Med"[ta]
       OR "Cell"[ta] OR "Nature"[ta] OR "Science"[ta] OR "Nat Med"[ta] OR "Sci Transl Med"[ta]
       OR "Cancer Cell"[ta] OR "Nat Biotechnol"[ta] OR "Nat Methods"[ta] OR "Nat Commun"[ta]
@@ -115,7 +120,6 @@ bluesky:
   searches:
     - "TCR"
     - "pMHC"
-    - "T cells"
     - "thymocyte"
     - "epitope"
     - "dextramer"

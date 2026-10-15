@@ -25,7 +25,7 @@ Literature Digest/
    journal feeds and Bluesky feeds (all in `config.yaml`).
 2. Merge duplicates across sources and drop papers seen in earlier issues.
 3. Claude scores every paper 0 to 10 against `interests.md` (low effort, batches of 60).
-4. The top 45 go to an editor step with a strict plain-language style guide; if banned
+4. The top 30 go to an editor step with a strict plain-language style guide; if banned
    phrasing slips through, the draft is rewritten once.
 5. Titles, journals and links come from the source data, never from the model.
 

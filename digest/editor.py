@@ -33,7 +33,7 @@ class Pick(BaseModel):
 
 
 class Terms(BaseModel):
-    terms: List[str] = Field(description="Up to 8 short PubMed search terms")
+    terms: List[str] = Field(description="Up to 5 short PubMed search terms")
 
 
 class Issue(BaseModel):
@@ -67,15 +67,19 @@ literally. Return a score for every id given."""
 
 TERMS_RULES = """Below are this week's posts from the T cell and immunology community.
 
-Name up to 3 T cell or immunology topics that the field is discussing this week and that a PubMed search
-should pick up: a protein, gene, cell type, disease, method or technique. Prefer the
-ones that look like a paper people are reacting to.
+Name up to 3 topics that the field is discussing this week and that a PubMed search
+should pick up: a protein, gene, cell type, disease, method or technique.
 
 Rules:
+- Only terms within this reader's field, as the interests sheet describes it:
+  T cell biology and immunology, plus methods they could use. A term from another
+  field (obstetrics, plant biology, ecology) does not belong here however much
+  it is discussed.
 - Each term is one to three words, as it would appear in a title or abstract.
-- Skip anything the reader's interests sheet already covers, and skip generic words
-  such as immunology, T cell, paper, preprint, science.
+- Skip anything the reader's configured searches already cover, and skip generic
+  words such as immunology, T cell, paper, preprint, science.
 - Skip grants, jobs, conferences, politics and personal news.
+- Prefer a term attached to a specific paper people are reacting to.
 - Return fewer terms, or none, rather than padding the list."""
 
 STYLE = """Write the way a scientist talks to a colleague over coffee. Plain words, short sentences.
@@ -101,8 +105,10 @@ Sections (an id appears in at most one section; empty sections are fine):
 - front_page: the 3-5 most important items for this reader, preprints included.
 - preprints: every other selected preprint, whatever its topic.
 - ebv_ms, tcr, methods: selected journal papers by topic.
-- social_media: what people in the field are saying this week. Name the paper or topic
-  and what the reaction was. Never mention the shortlist, the posts as a dataset, or counts. Skip if nothing stands out.
+- social_media: at most 3 bullets, and only about science: a paper people are reacting
+  to, a result being questioned, a method people are trying. Name it and say what the
+  reaction was. Leave out funding policy, jobs, conferences, obituaries and general news.
+  Never mention the shortlist, the posts as a dataset, or post counts. Empty is fine.
 - notable: other journal papers worth a glance, including big immunology stories.
 - off_topic: 1-3 general-interest pieces (news features, essays) if any are good.
 - editorial: one or two sentences about the week, or empty if there is nothing concrete to say.
@@ -168,7 +174,7 @@ class Editor:
                 error = str(result.get("result") or result.get("subtype") or "unknown error")
         raise RuntimeError(f"Claude Code call failed: {error}")
 
-    def suggest_terms(self, posts, limit=8):
+    def suggest_terms(self, posts, limit=5):
         """Search terms taken from what the field is posting about this week."""
         ranked = sorted(posts, key=lambda p: (p.get("followed", False),
                                               p["likes"] + 2 * p["reposts"]), reverse=True)
