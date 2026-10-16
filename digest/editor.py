@@ -1,0 +1,256 @@
+"""Claude steps, run through the Claude Code CLI on this machine (`claude -p`),
+so they use the Claude Code login instead of a paid API key.
+
+1. triage: score every new paper against interests.md
+2. write_issue: pick and describe the week's papers from the shortlist
+
+Links and titles are filled in by the renderer, never by the model, so the
+issue cannot point at a paper that does not exist."""
+import json
+import re
+import shutil
+import subprocess
+from typing import List, Literal
+
+from pydantic import BaseModel, Field, ValidationError
+
+Desk = Literal["tcr", "methods", "ebv_ms", "big_story", "off_topic", "other"]
+
+
+class Score(BaseModel):
+    id: int
+    score: int = Field(description="0-10 relevance for this reader")
+    desk: Desk
+
+
+class Triage(BaseModel):
+    scores: List[Score]
+
+
+class Pick(BaseModel):
+    id: int
+    line: str = Field(description="One plain sentence, or empty")
+
+
+class Buzz(BaseModel):
+    post: int = Field(description="Id of the post this bullet comes from")
+    paper: int = Field(description="Shortlist id of the paper being discussed, or -1")
+    line: str = Field(description="One plain sentence on what the reaction was")
+
+
+class Terms(BaseModel):
+    terms: List[str] = Field(description="Up to 5 short PubMed search terms")
+
+
+class Issue(BaseModel):
+    editorial: str = Field(description="One or two plain sentences on the week, or empty")
+    front_page: List[Pick] = Field(description="The 3-5 papers this reader must not miss")
+    preprints: List[Pick]
+    ebv_ms: List[Pick]
+    tcr: List[Pick]
+    methods: List[Pick]
+    social_media: List[Buzz] = Field(description="Up to 3 bullets on what the field is discussing")
+    notable: List[Pick] = Field(description="Worth a glance; line may be empty")
+    off_topic: List[Pick] = Field(description="1-3 general-interest pieces; line may be empty")
+
+
+TRIAGE_RULES = """You triage new literature for one scientist. Their interests sheet is below.
+
+Score each item 0-10 for how much THIS reader would want to see it:
+- 9-10: directly on a core interest, or a major result in their field
+- 6-8: clearly relevant, solid work
+- 3-5: tangential
+- 0-2: off-topic or low value
+
+Desks: tcr = TCR specificity, cross-reactivity, structure, repertoire; methods = new
+experimental or computational T cell methods; ebv_ms = EBV and multiple sclerosis;
+big_story = a major immunology result of broad interest regardless of topic;
+off_topic = a news feature, essay or science-writing piece on a general topic (not a
+research paper), scored by how interesting it is to a curious scientist; other = anything else.
+
+Be strict: most items each week should score below 5. Apply the reader's exclusions
+literally. Return a score for every id given."""
+
+TERMS_RULES = """Below are this week's posts from the T cell and immunology community.
+
+Name up to 3 topics that the field is discussing this week and that a PubMed search
+should pick up: a protein, gene, cell type, disease, method or technique.
+
+Rules:
+- Only terms within this reader's field, as the interests sheet describes it:
+  T cell biology and immunology, plus methods they could use. A term from another
+  field (obstetrics, plant biology, ecology) does not belong here however much
+  it is discussed.
+- Each term is one to three words, as it would appear in a title or abstract.
+- Skip anything the reader's configured searches already cover, and skip generic
+  words such as immunology, T cell, paper, preprint, science.
+- Skip grants, jobs, conferences, politics and personal news.
+- Prefer a term attached to a specific paper people are reacting to.
+- Return fewer terms, or none, rather than padding the list."""
+
+STYLE = """Write the way a scientist talks to a colleague over coffee. Plain words, short sentences.
+- Say what was done and what came out, using the concrete nouns and numbers in the abstract.
+  If the abstract gives no specifics, keep the line short or leave it empty.
+- Add why it matters to this reader only when that is not obvious, in a few words.
+- One sentence per entry, ideally under 20 words.
+- No intensifiers or sales words: genuinely, truly, really, remarkably, particularly,
+  importantly, notably, new, newly, novel, first-ever, standout, must-read, groundbreaking, crucial, pivotal, key, exciting,
+  promising, robust, comprehensive, landscape, underscores, highlights, sheds light,
+  paves the way, delve, unveils.
+- No contrast framing: never "not just X", "not another X", "more than X", "X, not Y",
+  "rather than", "beyond X". State what the thing is, not what it is not.
+- No colons for effect, no em dashes, no exclamation marks, no rhetorical questions.
+- Do not start with "This paper", "This study", "The authors", "Researchers"."""
+
+EDITOR_RULES = f"""You edit a short weekly literature digest for one scientist (interests below).
+From the shortlisted items and social media posts, choose and describe this week's items.
+
+{STYLE}
+
+Sections (an id appears in at most one section; empty sections are fine):
+- front_page: the 3-5 most important items for this reader, preprints included.
+- preprints: every other selected preprint, whatever its topic.
+- ebv_ms, tcr, methods: selected journal papers by topic.
+- social_media: at most 3 bullets, and only about science: a paper people are reacting
+  to, a result being questioned, a method people are trying. Name it and say what the
+  reaction was. Each bullet carries the id of the post it comes from, and the shortlist
+  id of the paper under discussion when that paper is on the shortlist, otherwise -1.
+  The reader follows those links, so pick the post that carries the discussion.
+  Leave out funding policy, jobs, conferences, obituaries and general news.
+  Never mention the shortlist, the posts as a dataset, or post counts. Empty is fine.
+- notable: other journal papers worth a glance, including big immunology stories.
+- off_topic: 1-3 general-interest pieces (news features, essays) if any are good.
+- editorial: one or two sentences about the week, or empty if there is nothing concrete to say.
+Use only ids from the shortlist. Never invent papers, numbers or authors."""
+
+BANNED = re.compile(
+    r"genuine|\btruly|\breally|remarkabl|particularly|importantly|notabl|\bnovel|first.ever|"
+    r"\bnew(ly|est)?\b|standout|must.read|long.awaited|\bfinally\b|at last|"
+    r"groundbreaking|crucial|pivotal|exciting|promising|\brobust|comprehensive|landscape|"
+    r"underscor|highlight|sheds? light|paves? the way|delve|unveil|game.changer|holistic|"
+    r"\bnot just\b|\bnot another\b|\bmore than (just|a)\b|\brather than\b|\bbeyond\b|"
+    r"^this (paper|study)|^the authors|^researchers|\u2014|!", re.IGNORECASE | re.MULTILINE)
+
+
+def _schema(model):
+    """Pydantic schema with $refs inlined, which the CLI accepts most reliably."""
+    schema = model.model_json_schema()
+    defs = schema.pop("$defs", {})
+
+    def inline(node):
+        if isinstance(node, dict):
+            if "$ref" in node:
+                return inline(defs[node["$ref"].split("/")[-1]])
+            out = {k: inline(v) for k, v in node.items() if k != "title"}
+            if out.get("type") == "object":
+                out["additionalProperties"] = False
+            return out
+        if isinstance(node, list):
+            return [inline(v) for v in node]
+        return node
+
+    return inline(schema)
+
+
+class Editor:
+    def __init__(self, cfg, interests):
+        self.cfg = cfg["claude"]
+        self.interests = interests
+        self.binary = self.cfg.get("binary") or shutil.which("claude") or "claude"
+
+    def _call(self, rules, content, model_cls, effort):
+        cmd = [self.binary, "-p",
+               "--output-format", "json",
+               "--json-schema", json.dumps(_schema(model_cls)),
+               "--system-prompt", f"{rules}\n\n<interests>\n{self.interests}\n</interests>",
+               "--tools", "",
+               "--no-session-persistence",
+               "--model", self.cfg.get("model", "opus"),
+               "--effort", effort]
+        for attempt in range(2):
+            proc = subprocess.run(cmd, input=content, capture_output=True, text=True,
+                                  timeout=self.cfg.get("timeout_s", 900))
+            try:
+                result = json.loads(proc.stdout)
+            except json.JSONDecodeError:
+                result = {"is_error": True, "result": (proc.stderr or proc.stdout)[-500:]}
+            if not result.get("is_error") and result.get("structured_output") is not None:
+                try:
+                    return model_cls.model_validate(result["structured_output"])
+                except ValidationError as e:
+                    error = f"invalid output ({e.error_count()} errors)"
+            else:
+                error = str(result.get("result") or result.get("subtype") or "unknown error")
+        raise RuntimeError(f"Claude Code call failed: {error}")
+
+    def suggest_terms(self, posts, limit=5):
+        """Search terms taken from what the field is posting about this week."""
+        ranked = sorted(posts, key=lambda p: (p.get("followed", False),
+                                              p["likes"] + 2 * p["reposts"]), reverse=True)
+        lines = [f"- {p['text']}" + (f" [link: {p['link_title']}]" if p["link_title"] else "")
+                 for p in ranked[:100]]
+        if not lines:
+            return []
+        out = self._call(TERMS_RULES, "\n".join(lines), Terms,
+                         self.cfg.get("triage_effort", "low"))
+        seen, terms = set(), []
+        for t in out.terms:
+            t = " ".join(t.split())[:60]
+            if t and t.lower() not in seen:
+                seen.add(t.lower())
+                terms.append(t)
+        return terms[:limit]
+
+    def triage(self, papers):
+        size = self.cfg.get("triage_batch_size", 60)
+        scores = {}
+        for i in range(0, len(papers), size):
+            batch = papers[i:i + size]
+            lines = []
+            for j, p in enumerate(batch, start=i):
+                tag = " [general journal]" if p.get("general") else ""
+                lines.append(f"[{j}] {p['title']} | {p['journal']}{tag} | {p['kind']}\n"
+                             f"{p['abstract'][:1500] or '(no abstract)'}")
+            out = self._call(TRIAGE_RULES, "\n\n".join(lines), Triage,
+                             self.cfg.get("triage_effort", "low"))
+            for s in out.scores:
+                if i <= s.id < i + len(batch):
+                    scores[s.id] = s
+        return scores
+
+    def write_issue(self, shortlist, posts):
+        lines = []
+        for p in shortlist:
+            buzz = f" | discussed in {p['_buzz']} posts" if p.get("_buzz") else ""
+            lines.append(f"[{p['_id']}] {p['title']} | {p['journal']} | {p['kind']} | "
+                         f"desk guess: {p['_desk']}{buzz}\n{p['abstract'][:2500] or '(no abstract)'}")
+        top_posts = sorted(posts, key=lambda p: (p.get("followed", False),
+                                                 p["likes"] + 2 * p["reposts"]), reverse=True)[:60]
+        by_post = dict(enumerate(top_posts))
+        post_lines = [f"- [{i}] @{p['author']}{' (you follow them)' if p.get('followed') else ''}"
+                      f" ({p['likes']} likes): {p['text']}"
+                      + (f" [link: {p['link_title']}]" if p["link_title"] else "")
+                      for i, p in by_post.items()]
+        content = ("<shortlist>\n" + "\n\n".join(lines) + "\n</shortlist>\n\n"
+                   "<bluesky>\n" + ("\n".join(post_lines) or "(no posts)") + "\n</bluesky>")
+        effort = self.cfg.get("editor_effort", "high")
+        issue = self._call(EDITOR_RULES, content, Issue, effort)
+
+        # One rewrite pass if banned phrasing slipped through.
+        offenders = sorted({m.group(0).lower() for t in _texts(issue) for m in BANNED.finditer(t)})
+        if offenders:
+            fix = (f"{content}\n\n<draft>\n{issue.model_dump_json()}\n</draft>\n\n"
+                   f"Rewrite the draft without these words or patterns: {', '.join(offenders)}. "
+                   "Keep the same ids and structure.")
+            issue = self._call(EDITOR_RULES, fix, Issue, effort)
+        return issue, by_post
+
+
+def _texts(issue):
+    yield issue.editorial
+    for section in (issue.front_page, issue.preprints, issue.ebv_ms, issue.tcr,
+                    issue.methods, issue.notable, issue.off_topic):
+        for pick in section:
+            yield pick.line
+    for bullet in issue.social_media:
+        yield bullet.line

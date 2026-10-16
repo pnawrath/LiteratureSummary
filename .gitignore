@@ -48,3 +48,7 @@ coverage.xml
 build/
 dist/
 *.egg-info/
+
+# Literature Digest local files
+digest/.venv/
+digest/launchd/run_digest.local.sh

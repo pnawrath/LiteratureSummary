@@ -1,0 +1,133 @@
+# Literature Digest configuration.
+# Every source URL lives here so a renamed feed only needs a one-line change.
+
+# Folder inside your Obsidian vault that the digest owns. The script reads
+# only <vault>/<folder>/interests.md and writes only inside <folder>.
+folder: "Literature Digest"
+
+# Look-back window (days) used on the first run; afterwards the window runs
+# from the last successful issue, capped at max_days_back.
+days_back: 7
+max_days_back: 21
+
+claude:
+  # Runs through the Claude Code CLI (`claude -p`) with your Claude login,
+  # so there is no API key and no per-use bill.
+  binary: ""                # empty = find `claude` on PATH
+  model: sonnet
+  triage_effort: low        # scoring every abstract against interests.md
+  editor_effort: high       # choosing and describing the week's papers
+  triage_batch_size: 60
+  shortlist_size: 30        # papers handed to the editor
+  min_score: 6              # 0-10; below this a paper never reaches the issue
+  timeout_s: 900
+
+pubmed:
+  email_env: ENTREZ_EMAIL
+  # Per-week ceiling on ids fetched per query. The broad nets get a lower one
+  # of their own, because past the first ~150 best matches they return fuss.
+  max_results: 300
+  query_max_results:
+    t_cells: 120
+    t_cell_methods: 120
+  term_max_results: 30      # the extra pass on terms taken from Bluesky
+  max_terms: 3
+  # Each query is ANDed with the date window and the exclusion filter.
+  queries:
+    tcr: >-
+      ("T cell receptor"[tiab] OR "T-cell receptor"[tiab] OR TCR[tiab] OR TCRs[tiab]
+      OR "peptide-MHC"[tiab] OR pMHC[tiab] OR "HLA-peptide"[tiab]
+      OR "cross-reactivity"[tiab] OR "cross-reactive T"[tiab] OR "T cell specificity"[tiab]
+      OR "T-cell specificity"[tiab] OR "TCR repertoire"[tiab] OR "TCR-pMHC"[tiab])
+    # Broad T cell net, title-only and limited to core immunology, neurology and
+    # top general journals; without the journal list it doubled the weekly count
+    # (about 200 extra papers, many low quality).
+    t_cells: >-
+      ("T cell"[ti] OR "T cells"[ti] OR "T-cell"[ti] OR "T-cells"[ti] OR CD8[ti]
+      OR CD4[ti] OR thymocyte*[ti] OR "Treg"[ti] OR "regulatory T"[ti]
+      OR TCR[ti] OR "MHC"[ti] OR "HLA"[ti])
+      NOT (review[pt] OR "systematic review"[pt] OR meta-analysis[pt])
+      AND ("Nat Immunol"[ta] OR "Immunity"[ta] OR "Sci Immunol"[ta] OR "J Exp Med"[ta]
+      OR "Cell"[ta] OR "Nature"[ta] OR "Science"[ta] OR "Nat Med"[ta] OR "Sci Transl Med"[ta]
+      OR "Cancer Cell"[ta] OR "Nat Biotechnol"[ta] OR "Nat Methods"[ta] OR "Nat Commun"[ta]
+      OR "Cell Rep"[ta] OR "J Clin Invest"[ta] OR "Proc Natl Acad Sci U S A"[ta]
+      OR "Sci Adv"[ta] OR "Nat Rev Immunol"[ta] OR "Trends Immunol"[ta] OR "Immunol Rev"[ta]
+      OR "J Immunol"[ta] OR "Eur J Immunol"[ta] OR "Cell Mol Immunol"[ta]
+      OR "Mucosal Immunol"[ta] OR "Elife"[ta] OR "Neuron"[ta] OR "Brain"[ta]
+      OR "Ann Neurol"[ta] OR "Neurol Neuroimmunol Neuroinflamm"[ta] OR "Mult Scler"[ta])
+    ebv_ms: >-
+      ("Epstein-Barr"[tiab] OR EBV[tiab] OR EBNA1[tiab] OR "herpesvirus 4"[tiab])
+      AND ("multiple sclerosis"[tiab] OR demyelinat*[tiab] OR neuroinflammat*[tiab])
+    cd8_ms: >-
+      ("CD8"[tiab] OR "cytotoxic T"[tiab]) AND ("multiple sclerosis"[tiab])
+    t_cell_methods: >-
+      ("T cell"[tiab] OR "T cells"[tiab] OR "T-cell"[tiab])
+      AND (method*[ti] OR platform[ti] OR screen*[ti] OR "deep learning"[tiab]
+      OR "machine learning"[tiab] OR "language model"[tiab] OR "structure prediction"[tiab]
+      OR AlphaFold[tiab] OR "single-cell"[ti])
+  exclude: >-
+    NOT (erratum[pt] OR "published erratum"[pt] OR comment[pt] OR editorial[pt]
+    OR "case reports"[pt] OR "retraction of publication"[pt])
+
+biorxiv:
+  # bioRxiv/medRxiv are run by openRxiv; if the domain changes, edit these.
+  api_url: "https://api.biorxiv.org/details/biorxiv/{start}/{end}/{cursor}?category=immunology"
+  rss_fallback: "https://connect.biorxiv.org/biorxiv_xml.php?subject=immunology"
+
+# Journal tables of contents. "general: true" journals contribute only their
+# immunology-relevant papers (the triage step decides).
+journals:
+  - name: Nature Immunology
+    url: https://www.nature.com/ni.rss
+  - name: Immunity
+    url: https://www.cell.com/immunity/inpress.rss
+  - name: Science Immunology
+    url: https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=sciimmunol
+  - name: Journal of Experimental Medicine
+    # Latest articles as published online; the 1000004.xml feed only lists the monthly issue.
+    url: https://rupress.org/rss/site_1000003/LatestArticles_1000004.xml
+  - name: European Journal of Immunology
+    url: https://onlinelibrary.wiley.com/feed/15214141/most-recent
+  - name: Cell
+    url: https://www.cell.com/cell/inpress.rss
+    general: true
+  - name: Science
+    url: https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=science
+    general: true
+  - name: Nature
+    url: https://www.nature.com/nature.rss
+    general: true
+  - name: PNAS
+    # Immunology and Inflammation section. The full eTOC lists only the latest
+    # weekly issue, whose papers went online before the weekly window.
+    url: https://www.pnas.org/action/showFeed?type=searchTopic&taxonomyCode=topic&tagCode=immun&jc=pnas&feed=rss
+
+bluesky:
+  # Kept small on purpose: more posts mostly add noise and tokens.
+  max_posts_per_feed: 50
+  posts_per_person: 10
+  max_people: 2000
+  # The people to read: everyone these accounts follow, duplicates removed.
+  # Refreshed weekly and cached in the vault's .state/follows.json.
+  follows_of:
+    - schlender.bsky.social
+    - cassotta.bsky.social
+  # Each week, take up to pubmed.max_terms extra PubMed search terms from what the field posts about.
+  dynamic_terms: true
+  # Keyword searches are the reliable part: custom feeds go quiet without warning.
+  # Single words beat exact phrases here: Bluesky matches a phrase literally,
+  # and "TCR repertoire" or "T cell receptor structure" return almost nothing.
+  searches:
+    - "TCR"
+    - "pMHC"
+    - "thymocyte"
+    - "epitope"
+    - "dextramer"
+    - "immunopeptidome"
+    - "EBNA1"
+    - "EBV multiple sclerosis"
+  # Bluesky lists of people whose posts you want (at:// URIs of app.bsky.graph.list).
+  lists: {}
+  feeds:
+    ImmunoSky: at://did:plc:rwkarouaeku2g6qkvqkirwa5/app.bsky.feed.generator/ImmunoSky
+    T cells in MS: at://did:plc:g3xk2d3jg6dma5glgwilyiyp/app.bsky.feed.generator/aaaknfoyzxnfa
