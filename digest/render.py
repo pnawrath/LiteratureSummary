@@ -13,12 +13,27 @@ def _entry(p, line=""):
     return "- " + " · ".join(parts)
 
 
+def _bullet(buzz, posts, by_id):
+    """A social media bullet, with a link to the paper under discussion (or the
+    page the post pointed at) and a link to the post itself."""
+    post = posts.get(buzz.post) or {}
+    parts = [buzz.line.strip()]
+    paper = by_id.get(buzz.paper)
+    if post.get("link"):
+        parts.append(f"[{post['link_title'][:70] or 'article'}]({post['link']})")
+    elif paper and paper["url"]:
+        parts.append(f"[{paper['title'].rstrip('.')[:70]}]({paper['url']})")
+    if post.get("url"):
+        parts.append(f"[post]({post['url']})")
+    return "- " + " · ".join(parts)
+
+
 SECTIONS = (("Front Page", "front_page"), ("Preprints", "preprints"), ("EBV & MS", "ebv_ms"),
             ("TCR specificity & structure", "tcr"), ("Methods", "methods"))
 TAIL = (("Notable", "notable"), ("Off Topic", "off_topic"))
 
 
-def render(issue, by_id, week, start, end, stats, problems):
+def render(issue, by_id, posts, week, start, end, stats, problems):
     num = week.split("-W")[1].lstrip("0")
     out = [
         "---",
@@ -47,7 +62,8 @@ def render(issue, by_id, week, start, end, stats, problems):
     for heading, field in SECTIONS:
         out += section(heading, getattr(issue, field))
     if issue.social_media:
-        out += ["## Social Media", *[f"- {b}" for b in issue.social_media], ""]
+        out += ["## Social Media",
+                *[_bullet(b, posts, by_id) for b in issue.social_media], ""]
     for heading, field in TAIL:
         out += section(heading, getattr(issue, field))
 

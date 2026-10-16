@@ -128,11 +128,11 @@ def main(argv=None):
     log(f"Shortlisted {len(shortlist)} of {len(fresh)}")
 
     log("Writing issue...")
-    issue = editor.write_issue(shortlist, posts)
+    issue, by_post = editor.write_issue(shortlist, posts)
     by_id = {p["_id"]: p for p in shortlist}
     stats = {"screened": len(fresh), "sources": [p["source"] for p in fresh],
              "posts": len(posts), "skipped_seen": skipped}
-    text = render.render(issue, by_id, week, start, end, stats, problems)
+    text = render.render(issue, by_id, by_post, week, start, end, stats, problems)
 
     issue_path.parent.mkdir(parents=True, exist_ok=True)
     issue_path.write_text(text)

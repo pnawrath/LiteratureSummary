@@ -32,6 +32,12 @@ class Pick(BaseModel):
     line: str = Field(description="One plain sentence, or empty")
 
 
+class Buzz(BaseModel):
+    post: int = Field(description="Id of the post this bullet comes from")
+    paper: int = Field(description="Shortlist id of the paper being discussed, or -1")
+    line: str = Field(description="One plain sentence on what the reaction was")
+
+
 class Terms(BaseModel):
     terms: List[str] = Field(description="Up to 5 short PubMed search terms")
 
@@ -43,7 +49,7 @@ class Issue(BaseModel):
     ebv_ms: List[Pick]
     tcr: List[Pick]
     methods: List[Pick]
-    social_media: List[str] = Field(description="2-5 one-line bullets on what the field is discussing")
+    social_media: List[Buzz] = Field(description="Up to 3 bullets on what the field is discussing")
     notable: List[Pick] = Field(description="Worth a glance; line may be empty")
     off_topic: List[Pick] = Field(description="1-3 general-interest pieces; line may be empty")
 
@@ -107,7 +113,10 @@ Sections (an id appears in at most one section; empty sections are fine):
 - ebv_ms, tcr, methods: selected journal papers by topic.
 - social_media: at most 3 bullets, and only about science: a paper people are reacting
   to, a result being questioned, a method people are trying. Name it and say what the
-  reaction was. Leave out funding policy, jobs, conferences, obituaries and general news.
+  reaction was. Each bullet carries the id of the post it comes from, and the shortlist
+  id of the paper under discussion when that paper is on the shortlist, otherwise -1.
+  The reader follows those links, so pick the post that carries the discussion.
+  Leave out funding policy, jobs, conferences, obituaries and general news.
   Never mention the shortlist, the posts as a dataset, or post counts. Empty is fine.
 - notable: other journal papers worth a glance, including big immunology stories.
 - off_topic: 1-3 general-interest pieces (news features, essays) if any are good.
@@ -217,9 +226,11 @@ class Editor:
                          f"desk guess: {p['_desk']}{buzz}\n{p['abstract'][:2500] or '(no abstract)'}")
         top_posts = sorted(posts, key=lambda p: (p.get("followed", False),
                                                  p["likes"] + 2 * p["reposts"]), reverse=True)[:60]
-        post_lines = [f"- @{p['author']}{' (you follow them)' if p.get('followed') else ''}"
+        by_post = dict(enumerate(top_posts))
+        post_lines = [f"- [{i}] @{p['author']}{' (you follow them)' if p.get('followed') else ''}"
                       f" ({p['likes']} likes): {p['text']}"
-                      + (f" [link: {p['link_title']}]" if p["link_title"] else "") for p in top_posts]
+                      + (f" [link: {p['link_title']}]" if p["link_title"] else "")
+                      for i, p in by_post.items()]
         content = ("<shortlist>\n" + "\n\n".join(lines) + "\n</shortlist>\n\n"
                    "<bluesky>\n" + ("\n".join(post_lines) or "(no posts)") + "\n</bluesky>")
         effort = self.cfg.get("editor_effort", "high")
@@ -232,7 +243,7 @@ class Editor:
                    f"Rewrite the draft without these words or patterns: {', '.join(offenders)}. "
                    "Keep the same ids and structure.")
             issue = self._call(EDITOR_RULES, fix, Issue, effort)
-        return issue
+        return issue, by_post
 
 
 def _texts(issue):
@@ -241,4 +252,5 @@ def _texts(issue):
                     issue.methods, issue.notable, issue.off_topic):
         for pick in section:
             yield pick.line
-    yield from issue.social_media
+    for bullet in issue.social_media:
+        yield bullet.line
